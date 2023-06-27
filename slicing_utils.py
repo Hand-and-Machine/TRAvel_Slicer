@@ -36,34 +36,26 @@ def get_surface(curve, z):
     return surface
 
 
-def get_corners(t, outer_curve, points=[]):
-    offset = t.get_extrude_width()
+def get_precision(t, curve):
+    resolution = t.get_resolution()
+    points = rs.DivideCurve (curve, 100)
+    ll = tu.line_length(points)
+    num_points = int(ll/resolution)+1
+    return num_points
 
-    corners = []
+
+def closest_point(point, points):
+    closest = {"point": None, "distance": 1000000}
     for p in range(len(points)):
-        pnt = points[p]
-        prev_pnt = points[(p-1) % len(points)]
-        next_pnt = points[(p+1) % len(points)]
-        v1 = rs.VectorUnitize(rs.VectorSubtract(prev_pnt, pnt))
-        v2 = rs.VectorUnitize(rs.VectorSubtract(next_pnt, pnt))
-        dot = rs.VectorDotProduct(v1, v2)
-        add = rs.VectorAdd(v1, v2)
-
-        if not (add.X == 0 and add.Y == 0 and add.Z == 0):
-            # acos has a domain of [-1, 1], sometimes rhinoscript
-            # returns close to 1 due to a precision error
-            angle = math.acos(min(max(dot, -1), 1)) * (180 / math.pi)
-
-            if angle < 160 and angle > 20:
-                # check that the corner isn't "inverted"
-                inside = rs.PointInPlanarClosedCurve(rs.VectorAdd(pnt, rs.VectorScale(rs.VectorUnitize(add), offset/10)), outer_curve)
-                if inside == 1:
-                    corners.append(pnt)
-
-    return corners
+        dist = rs.Distance(point, points[p])
+        if dist < closest['distance']:
+            closest['distance'] = dist
+            closest['point'] = p
+    
+    return closest['point']
 
 
-def get_corner(t, outer_curve, inner_curve, points=[]):
+def get_corner(t, outer_curve, inner_curve, points):
     offset = t.get_extrude_width()
     center = rs.CurveAreaCentroid(inner_curve)[0]
     closest = {"point": 0, "distance": 1000000}
@@ -93,7 +85,7 @@ def get_corner(t, outer_curve, inner_curve, points=[]):
     return closest["point"]
 
 
-def get_isocontours(t, curve, parent, precision=100):
+def get_isocontours(t, curve, parent, precision):
     new_curves = get_isocontour(t, curve, precision)
     if not new_curves:
         return []
@@ -124,7 +116,7 @@ def get_isocontour(t, curve, precision):
     if winding_order == None:
         print("Error: winding order could not return a direction")
         return None
-    
+
     # determine each new p' at distance offset away from p
     new_points = [None]*len(points)
     discarded_points = [None]*len(points)
@@ -167,6 +159,11 @@ def get_isocontour(t, curve, precision):
                         sequences[-1].append(i)
                     elif new_points[next_i] != None and next_i != start_index:
                         sequences.append([])
+
+            # remove sequences that consist of a single point
+            for seq in sequences:
+                if len(seq) <= 1:
+                    sequences.remove(seq)
 
             # get start and end points of all sequences
             start = [seq[0] for seq in sequences]
@@ -265,7 +262,6 @@ def spiral_contours(t, isocontours, precision):
     # choose appropriate starting index on outermost contour
     # get center point of innermost contour to compare
     start_index = get_corner(t, isocontours[0], isocontours[-1], points)
-    #start_index = 0
 
     # spiral region
     start_point = None
@@ -415,11 +411,11 @@ def set_node_types(node):
 
 def segment_tree(root):
     region_root = {"guid":"0", "curves":[], "children":[]}
-    fill_region(region_root, root)
+    fill_region(region_root, root, 0)
     return region_root
 
 
-def fill_region(region_node, node, idx=0):
+def fill_region(region_node, node, idx):
     # if the number of children is zero, append to curves
     if(len(node["children"]) == 0):
         # add curve to the region
@@ -429,7 +425,7 @@ def fill_region(region_node, node, idx=0):
     elif len(node["children"]) == 1:
         # add curve to the region
         region_node["curves"].append(node["guid"])
-        fill_region(region_node, node["children"][0])
+        fill_region(region_node, node["children"][0], 0)
     # if the number of children is greater than one,
     # we have found a split and need to add a new node
     elif len(node["children"]) > 1:
@@ -449,7 +445,7 @@ def fill_region(region_node, node, idx=0):
                 new_new_node = {"guid":new_node["guid"]+"_"+str(idx), "curves":[], "parent":new_node, "children":[]}
                 new_node["children"].append(new_new_node)
 
-                fill_region(new_new_node, child)
+                fill_region(new_new_node, child, 0)
                 idx = idx + 1
 
 
@@ -458,8 +454,11 @@ def connect_spiralled_nodes(t, root):
     all_nodes = get_all_nodes(root)
     all_nodes = {node['guid']: node for node in all_nodes}
 
-    path = connect_path(t, root, all_nodes)
+    for n in sorted(all_nodes):
+        print(n, len(all_nodes[n]['fermat_spiral']))
 
+    path = connect_path(t, root, all_nodes, 0, [])
+    print(path)
     spiral = []
     for p in range(len(path)):
         node = all_nodes[path[p][0]]
@@ -469,7 +468,7 @@ def connect_spiralled_nodes(t, root):
     return spiral
 
 
-def connect_path(t, node, all_nodes, start_idx=0, spiral=[]):
+def connect_path(t, node, all_nodes, start_idx, spiral):
     final_idx = len(node['fermat_spiral'])-1
     if node.get('parent'):
         final_idx = next(idx for idx in node['connection'][node['parent']['guid']] if idx != start_idx)
@@ -676,8 +675,57 @@ def fill_layer_with_fermat_spiral(t, shape, z):
         if new_curves:
             isocontours = isocontours + new_curves
 
-    #for i in isocontours:
-        #tu.follow_closed_line(t, curve=i)
+    region_tree = segment_tree(root)
+    set_node_types(region_tree)
+    all_nodes = get_all_nodes(region_tree)
+
+    print("Spiralling Regions")
+    for node in all_nodes:
+        if node['type'] == 1:
+            if 'root' in node['curves']:
+                node['curves'].remove('root')
+            spiral, indices = spiral_contours(t, node["curves"], precision)
+            node["fermat_spiral"] = fermat_spiral(t, spiral, indices)
+        elif node['type'] == 2:
+            node['fermat_spiral'] = rs.DivideCurve(node["curves"][0], precision)
+
+    print("Connecting Spiralled Regions")
+    final_spiral = connect_spiralled_nodes(t, region_tree)
+    t.pen_up()
+    t.set_position(final_spiral[0].X, final_spiral[0].Y, final_spiral[0].Z)
+    t.pen_down()
+    tu.follow_closed_line(t, points=final_spiral)
+
+    all_nodes = {node['guid']: node for node in all_nodes}
+
+    return final_spiral[-1]
+
+
+def slice_fermat_fill(t, shape):
+    layers = int(math.floor(get_shape_height(shape) / t.get_layer_height()))
+    for l in range(layers):
+        fill_layer_with_fermat_spiral(t, shape, l*t.get_layer_height())
+
+
+def fill_layer_with_spiral(t, shape, z):
+    # get outer curves of shape
+    plane = get_plane(z)
+
+    # if there is more than one curve when intersecting
+    # with the plane, we will have travel paths between them
+    curves = rs.AddSrfContourCrvs(shape, plane)
+
+    # slice the shape
+    print("Generating Isocontours")
+    precision = 300
+    root = {"guid": "root", "depth": 0, "children":[]}
+    isocontours = [] + curves
+    for curve in curves:
+        node = {"guid": curve, "depth": root["depth"]+1, "parent": root, "children":[]}
+        root["children"].append(node)
+        new_curves = get_isocontours(t, curve, node, precision)
+        if new_curves:
+            isocontours = isocontours + new_curves
 
     region_tree = segment_tree(root)
     set_node_types(region_tree)
@@ -689,45 +737,64 @@ def fill_layer_with_fermat_spiral(t, shape, z):
             if 'root' in node['curves']:
                 node['curves'].remove('root')
             spiral, indices = spiral_contours(t, node["curves"], precision)
+            t.pen_up()
+            t.set_position(spiral[0].X, spiral[0].Y, spiral[0].Z)
+            t.pen_down()
+            for p in spiral:
+                t.set_position(p.X, p.Y, p.Z)
             #tu.follow_closed_line(t, points=spiral)
-            node["fermat_spiral"] = fermat_spiral(t, spiral, indices)
-            #tu.follow_closed_line(t, points=node['fermat_spiral'])
         elif node['type'] == 2:
-            node['fermat_spiral'] = rs.DivideCurve(node["curves"][0], precision)
-            #tu.follow_closed_line(t, points=node['fermat_spiral'])
-
-    print("Connecting Spiralled Regions")
-    final_spiral = connect_spiralled_nodes(t, region_tree)
-    t.pen_up()
-    t.set_position(final_spiral[0].X, final_spiral[0].Y, final_spiral[0].Z)
-    t.pen_down()
-    tu.follow_closed_line(t, points=final_spiral)
-
-    all_nodes = {node['guid']: node for node in all_nodes}
-
-    corners = []
-    starts = []
-    ends = []
-    for i in all_nodes:
-        node = all_nodes[i]
-        corners.append(node['fermat_spiral'][0])
-        corners.append(node['fermat_spiral'][-1])
-        connection = node.get('connection') or []
-
-        starts = starts + [node['fermat_spiral'][connection[n].keys()[0]] for n in connection if len(n) > len(node['guid'])]
-        starts = starts + [all_nodes[n]['fermat_spiral'][connection[n][connection[n].keys()[0]]] for n in connection if len(n) > len(node['guid'])]
-        ends = ends + [node['fermat_spiral'][connection[n].keys()[1]] for n in connection if len(n) > len(node['guid'])]
-        ends = ends + [all_nodes[n]['fermat_spiral'][connection[n][connection[n].keys()[1]]] for n in connection if len(n) > len(node['guid'])]
-
-    return final_spiral[0], starts, ends
+            points = rs.DivideCurve(node["curves"][0], precision)
+            t.pen_up()
+            t.set_position(points[0].X, points[0].Y, points[0].Z)
+            t.pen_down()
+            for p in points:
+                t.set_position(p.X, p.Y, p.Z)
+            #tu.follow_closed_line(t, points=points)
 
 
-def draw_layers_fermat(t, shape):
+def slice_spiral_fill(t, shape):
     layers = int(math.floor(get_shape_height(shape) / t.get_layer_height()))
-    start = None
-    starts = []
-    ends = []
     for l in range(layers):
-        start, starts, ends = fill_layer_with_fermat_spiral(t, shape, l*t.get_layer_height())
-    return start, starts, ends
+        fill_layer_with_spiral(t, shape, l*t.get_layer_height())
 
+
+def fill_layer_with_contours(t, shape, z):
+    # get outer curves of shape
+    plane = get_plane(z)
+    
+    # if there is more than one curve when intersecting
+    # with the plane, we will have travel paths between them
+    curves = rs.AddSrfContourCrvs(shape, plane)
+
+    # slice the shape
+    print("Generating Isocontours")
+    precision = 300
+    root = {"guid": "root", "depth": 0, "children":[]}
+    isocontours = [] + curves
+    for curve in curves:
+        node = {"guid": curve, "depth": root["depth"]+1, "parent": root, "children":[]}
+        root["children"].append(node)
+        new_curves = get_isocontours(t, curve, node, precision)
+        if new_curves:
+            isocontours = isocontours + new_curves
+
+    isocontours = [rs.DivideCurve(i, precision) for i in isocontours]
+
+    start_idx = 0
+    for i in range(len(isocontours)):
+        start = isocontours[i][start_idx]
+        t.pen_up()
+        t.set_position(start.X, start.Y, start.Z)
+        t.pen_down()
+        points = [isocontours[i][idx] for idx in range(start_idx, len(isocontours[i])) + range(0, start_idx)]
+        tu.follow_closed_line(t, points=points)
+
+        if i<len(isocontours)-1:
+            start_idx = closest_point(start, isocontours[i+1])
+
+
+def slice_contour_fill(t, shape):
+    layers = int(math.floor(get_shape_height(shape) / t.get_layer_height()))
+    for l in range(layers):
+        fill_layer_with_contours(t, shape, l*t.get_layer_height())
