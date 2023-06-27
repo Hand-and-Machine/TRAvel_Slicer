@@ -249,7 +249,7 @@ def get_winding_order(t, curve, points):
     return winding_order, direction
 
 
-def spiral_contours(t, isocontours, precision):
+def spiral_contours(t, isocontours, precision, start_index):
     if len(isocontours) == 0:
         print("Error: no isocontours passed in")
         return
@@ -261,7 +261,8 @@ def spiral_contours(t, isocontours, precision):
 
     # choose appropriate starting index on outermost contour
     # get center point of innermost contour to compare
-    start_index = get_corner(t, isocontours[0], isocontours[-1], points)
+    if not start_index:
+        start_index = get_corner(t, isocontours[0], isocontours[-1], points)
 
     # spiral region
     start_point = None
@@ -454,11 +455,7 @@ def connect_spiralled_nodes(t, root):
     all_nodes = get_all_nodes(root)
     all_nodes = {node['guid']: node for node in all_nodes}
 
-    for n in sorted(all_nodes):
-        print(n, len(all_nodes[n]['fermat_spiral']))
-
     path = connect_path(t, root, all_nodes, 0, [])
-    print(path)
     spiral = []
     for p in range(len(path)):
         node = all_nodes[path[p][0]]
@@ -655,7 +652,7 @@ def get_connection_indices(t, node):
     return start_index, end_index
 
 
-def fill_layer_with_fermat_spiral(t, shape, z):
+def fill_layer_with_fermat_spiral(t, shape, z, start_pnt=None):
     # get outer curves of shape
     plane = get_plane(z)
     
@@ -682,9 +679,12 @@ def fill_layer_with_fermat_spiral(t, shape, z):
     print("Spiralling Regions")
     for node in all_nodes:
         if node['type'] == 1:
+            start_idx = None
             if 'root' in node['curves']:
                 node['curves'].remove('root')
-            spiral, indices = spiral_contours(t, node["curves"], precision)
+                if start_pnt:
+                    start_idx = closest_point(start_pnt, rs.DivideCurve(node['curves'][0], precision))
+            spiral, indices = spiral_contours(t, node["curves"], precision, start_idx)
             node["fermat_spiral"] = fermat_spiral(t, spiral, indices)
         elif node['type'] == 2:
             node['fermat_spiral'] = rs.DivideCurve(node["curves"][0], precision)
@@ -694,7 +694,8 @@ def fill_layer_with_fermat_spiral(t, shape, z):
     t.pen_up()
     t.set_position(final_spiral[0].X, final_spiral[0].Y, final_spiral[0].Z)
     t.pen_down()
-    tu.follow_closed_line(t, points=final_spiral)
+    for p in final_spiral:
+        t.set_position(p.X, p.Y, p.Z)
 
     all_nodes = {node['guid']: node for node in all_nodes}
 
@@ -702,12 +703,13 @@ def fill_layer_with_fermat_spiral(t, shape, z):
 
 
 def slice_fermat_fill(t, shape):
-    layers = int(math.floor(get_shape_height(shape) / t.get_layer_height()))
+    layers = int(math.floor(get_shape_height(shape) / t.get_layer_height())) + 1
     for l in range(layers):
-        fill_layer_with_fermat_spiral(t, shape, l*t.get_layer_height())
+        print("Slicing Layer "+str(l))
+        fill_layer_with_fermat_spiral(t, shape, l*t.get_layer_height(), t.get_position())
 
 
-def fill_layer_with_spiral(t, shape, z):
+def fill_layer_with_spiral(t, shape, z, start_pnt):
     # get outer curves of shape
     plane = get_plane(z)
 
@@ -734,15 +736,17 @@ def fill_layer_with_spiral(t, shape, z):
     print("Spiralling Regions")
     for node in all_nodes:
         if node['type'] == 1:
+            start_idx = None
             if 'root' in node['curves']:
                 node['curves'].remove('root')
-            spiral, indices = spiral_contours(t, node["curves"], precision)
+                if start_pnt:
+                    start_idx = closest_point(start_pnt, rs.DivideCurve(node['curves'][0], precision))
+            spiral, indices = spiral_contours(t, node["curves"], precision, start_idx)
             t.pen_up()
             t.set_position(spiral[0].X, spiral[0].Y, spiral[0].Z)
             t.pen_down()
             for p in spiral:
                 t.set_position(p.X, p.Y, p.Z)
-            #tu.follow_closed_line(t, points=spiral)
         elif node['type'] == 2:
             points = rs.DivideCurve(node["curves"][0], precision)
             t.pen_up()
@@ -750,12 +754,12 @@ def fill_layer_with_spiral(t, shape, z):
             t.pen_down()
             for p in points:
                 t.set_position(p.X, p.Y, p.Z)
-            #tu.follow_closed_line(t, points=points)
 
 
 def slice_spiral_fill(t, shape):
-    layers = int(math.floor(get_shape_height(shape) / t.get_layer_height()))
+    layers = int(math.floor(get_shape_height(shape) / t.get_layer_height())) + 1
     for l in range(layers):
+        print("Slicing Layer "+str(l))
         fill_layer_with_spiral(t, shape, l*t.get_layer_height())
 
 
@@ -795,6 +799,7 @@ def fill_layer_with_contours(t, shape, z):
 
 
 def slice_contour_fill(t, shape):
-    layers = int(math.floor(get_shape_height(shape) / t.get_layer_height()))
+    layers = int(math.floor(get_shape_height(shape) / t.get_layer_height())) + 1
     for l in range(layers):
+        print("Slicing Layer "+str(l))
         fill_layer_with_contours(t, shape, l*t.get_layer_height())
