@@ -690,8 +690,10 @@ def fill_layer_with_fermat_spiral(t, shape, z, start_pnt=None):
             node['fermat_spiral'] = rs.DivideCurve(node["curves"][0], precision)
 
     print("Connecting Spiralled Regions")
+    travel_paths = []
     final_spiral = connect_spiralled_nodes(t, region_tree)
     t.pen_up()
+    travel_paths.append(rs.AddCurve([t.get_position(), final_spiral[0]]))
     t.set_position(final_spiral[0].X, final_spiral[0].Y, final_spiral[0].Z)
     t.pen_down()
     for p in final_spiral:
@@ -699,14 +701,17 @@ def fill_layer_with_fermat_spiral(t, shape, z, start_pnt=None):
 
     all_nodes = {node['guid']: node for node in all_nodes}
 
-    return final_spiral[-1]
+    return travel_paths
 
 
 def slice_fermat_fill(t, shape):
+    travel_paths = []
     layers = int(math.floor(get_shape_height(shape) / t.get_layer_height())) + 1
     for l in range(layers):
         print("Slicing Layer "+str(l))
-        fill_layer_with_fermat_spiral(t, shape, l*t.get_layer_height(), t.get_position())
+        travel_paths = travel_paths + fill_layer_with_fermat_spiral(t, shape, l*t.get_layer_height(), t.get_position())
+    
+    return travel_paths
 
 
 def fill_layer_with_spiral(t, shape, z, start_pnt):
@@ -734,6 +739,7 @@ def fill_layer_with_spiral(t, shape, z, start_pnt):
     all_nodes = get_all_nodes(region_tree)
 
     print("Spiralling Regions")
+    travel_paths = []
     for node in all_nodes:
         if node['type'] == 1:
             start_idx = None
@@ -743,6 +749,7 @@ def fill_layer_with_spiral(t, shape, z, start_pnt):
                     start_idx = closest_point(start_pnt, rs.DivideCurve(node['curves'][0], precision))
             spiral, indices = spiral_contours(t, node["curves"], precision, start_idx)
             t.pen_up()
+            travel_paths.append(rs.AddCurve([t.get_position(), spiral[0]]))
             t.set_position(spiral[0].X, spiral[0].Y, spiral[0].Z)
             t.pen_down()
             for p in spiral:
@@ -750,17 +757,23 @@ def fill_layer_with_spiral(t, shape, z, start_pnt):
         elif node['type'] == 2:
             points = rs.DivideCurve(node["curves"][0], precision)
             t.pen_up()
+            travel_paths.append(rs.AddCurve([t.get_position(), spiral[0]]))
             t.set_position(points[0].X, points[0].Y, points[0].Z)
             t.pen_down()
             for p in points:
                 t.set_position(p.X, p.Y, p.Z)
 
+    return travel_paths
+
 
 def slice_spiral_fill(t, shape):
+    travel_paths = []
     layers = int(math.floor(get_shape_height(shape) / t.get_layer_height())) + 1
     for l in range(layers):
         print("Slicing Layer "+str(l))
-        fill_layer_with_spiral(t, shape, l*t.get_layer_height())
+        travel_paths = travel_paths + fill_layer_with_spiral(t, shape, l*t.get_layer_height(), t.get_position())
+
+    return travel_paths
 
 
 def fill_layer_with_contours(t, shape, z):
@@ -785,21 +798,30 @@ def fill_layer_with_contours(t, shape, z):
 
     isocontours = [rs.DivideCurve(i, precision) for i in isocontours]
 
+    travel_paths = []
     start_idx = 0
     for i in range(len(isocontours)):
         start = isocontours[i][start_idx]
         t.pen_up()
+        travel_paths.append(rs.AddCurve([t.get_position(), start]))
         t.set_position(start.X, start.Y, start.Z)
         t.pen_down()
+
         points = [isocontours[i][idx] for idx in range(start_idx, len(isocontours[i])) + range(0, start_idx)]
-        tu.follow_closed_line(t, points=points)
+        for p in points:
+                t.set_position(p.X, p.Y, p.Z)
 
         if i<len(isocontours)-1:
             start_idx = closest_point(start, isocontours[i+1])
 
+    return travel_paths
+
 
 def slice_contour_fill(t, shape):
+    travel_paths = []
     layers = int(math.floor(get_shape_height(shape) / t.get_layer_height())) + 1
     for l in range(layers):
         print("Slicing Layer "+str(l))
-        fill_layer_with_contours(t, shape, l*t.get_layer_height())
+        travel_paths = travel_paths + fill_layer_with_contours(t, shape, l*t.get_layer_height())
+
+    return travel_paths
