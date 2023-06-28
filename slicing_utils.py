@@ -102,7 +102,7 @@ def get_isocontours(t, curve, parent, precision):
 
 def get_isocontour(t, curve, precision):
     if not (curve and rs.IsCurveClosed(curve)):
-        print("Error: get_isocontours called with not a curve: ", curve)
+        print("Error: get_isocontours called with not a closed curve: ", curve)
         return None
 
     if precision <= 2:
@@ -163,6 +163,7 @@ def get_isocontour(t, curve, precision):
             # remove sequences that consist of a single point
             for seq in sequences:
                 if len(seq) <= 1:
+                    print(seq)
                     sequences.remove(seq)
 
             # get start and end points of all sequences
@@ -219,7 +220,7 @@ def get_isocontour(t, curve, precision):
 
             return curves
         else:
-            return [rs.AddCurve(new_points)]
+            return [rs.AddCurve(new_points + [new_points[0]])]
     else:
         return None
 
