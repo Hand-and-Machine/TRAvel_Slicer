@@ -679,16 +679,18 @@ def fill_layer_with_fermat_spiral(t, shape, z, start_pnt=None):
 
     print("Spiralling Regions")
     for node in all_nodes:
-        if node['type'] == 1:
-            start_idx = None
-            if 'root' in node['curves']:
-                node['curves'].remove('root')
+        if len(node['curves']) > 0:
+            if node['type'] == 1:
+                start_idx = None
+                if 'root' in node['curves']:
+                    node['curves'].remove('root')
                 if start_pnt:
+                    print(node['curves'][0])
                     start_idx = closest_point(start_pnt, rs.DivideCurve(node['curves'][0], precision))
-            spiral, indices = spiral_contours(t, node["curves"], precision, start_idx)
-            node["fermat_spiral"] = fermat_spiral(t, spiral, indices)
-        elif node['type'] == 2:
-            node['fermat_spiral'] = rs.DivideCurve(node["curves"][0], precision)
+                spiral, indices = spiral_contours(t, node["curves"], precision, start_idx)
+                node["fermat_spiral"] = fermat_spiral(t, spiral, indices)
+            elif node['type'] == 2:
+                node['fermat_spiral'] = rs.DivideCurve(node["curves"][0], precision)
 
     print("Connecting Spiralled Regions")
     travel_paths = []
@@ -707,7 +709,7 @@ def fill_layer_with_fermat_spiral(t, shape, z, start_pnt=None):
 
 def slice_fermat_fill(t, shape):
     travel_paths = []
-    layers = int(math.floor(get_shape_height(shape) / t.get_layer_height())) + 1
+    layers = int(math.floor(get_shape_height(shape) / t.get_layer_height()))
     for l in range(layers):
         print("Slicing Layer "+str(l))
         travel_paths = travel_paths + fill_layer_with_fermat_spiral(t, shape, l*t.get_layer_height(), t.get_position())
@@ -769,7 +771,7 @@ def fill_layer_with_spiral(t, shape, z, start_pnt):
 
 def slice_spiral_fill(t, shape):
     travel_paths = []
-    layers = int(math.floor(get_shape_height(shape) / t.get_layer_height())) + 1
+    layers = int(math.floor(get_shape_height(shape) / t.get_layer_height()))
     for l in range(layers):
         print("Slicing Layer "+str(l))
         travel_paths = travel_paths + fill_layer_with_spiral(t, shape, l*t.get_layer_height(), t.get_position())
@@ -820,7 +822,7 @@ def fill_layer_with_contours(t, shape, z):
 
 def slice_contour_fill(t, shape):
     travel_paths = []
-    layers = int(math.floor(get_shape_height(shape) / t.get_layer_height())) + 1
+    layers = int(math.floor(get_shape_height(shape) / t.get_layer_height()))
     for l in range(layers):
         print("Slicing Layer "+str(l))
         travel_paths = travel_paths + fill_layer_with_contours(t, shape, l*t.get_layer_height())
