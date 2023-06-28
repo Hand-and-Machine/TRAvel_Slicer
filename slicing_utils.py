@@ -85,18 +85,20 @@ def get_corner(t, outer_curve, inner_curve, points):
     return closest["point"]
 
 
-def get_isocontours(t, curve, parent, precision):
+def get_isocontours(t, curve, parent, precision, wall_mode=False, walls=3):
     new_curves = get_isocontour(t, curve, precision)
     if not new_curves:
         return []
     else:
         curves = [] + new_curves
-        for c in new_curves:
-            node = {"guid":c, "depth":parent["depth"]+1, "parent":parent, "children":[]}
-            parent["children"].append(node)
-            new_new_curves = get_isocontours(t, c, node, precision)
-            for nc in new_new_curves:
-                curves.append(nc)
+        new_depth = parent["depth"]+1
+        if not wall_mode or (wall_mode and new_depth <= walls):
+            for c in new_curves:
+                node = {"guid":c, "depth":new_depth, "parent":parent, "children":[]}
+                parent["children"].append(node)
+                new_new_curves = get_isocontours(t, c, node, precision, wall_mode=wall_mode, walls=walls)
+                for nc in new_new_curves:
+                    curves.append(nc)
         return curves
 
 
@@ -653,7 +655,7 @@ def get_connection_indices(t, node):
     return start_index, end_index
 
 
-def fill_layer_with_fermat_spiral(t, shape, z, start_pnt=None):
+def fill_layer_with_fermat_spiral(t, shape, z, start_pnt=None, wall_mode=False, walls=3):
     # get outer curves of shape
     plane = get_plane(z)
     
@@ -669,7 +671,7 @@ def fill_layer_with_fermat_spiral(t, shape, z, start_pnt=None):
     for curve in curves:
         node = {"guid": curve, "depth": root["depth"]+1, "parent": root, "children":[]}
         root["children"].append(node)
-        new_curves = get_isocontours(t, curve, node, precision)
+        new_curves = get_isocontours(t, curve, node, precision, wall_mode, walls)
         if new_curves:
             isocontours = isocontours + new_curves
 
@@ -707,13 +709,16 @@ def fill_layer_with_fermat_spiral(t, shape, z, start_pnt=None):
     return travel_paths
 
 
-def slice_fermat_fill(t, shape):
+def slice_fermat_fill(t, shape, wall_mode=False, walls=3, fill_bottom=False, bottom_layers=3):
     travel_paths = []
-    layers = int(math.floor(get_shape_height(shape) / t.get_layer_height()))
+    layers = int(math.floor(get_shape_height(shape) / t.get_layer_height())) + 1
     for l in range(layers):
-        print("Slicing Layer "+str(l))
-        travel_paths = travel_paths + fill_layer_with_fermat_spiral(t, shape, l*t.get_layer_height(), t.get_position())
-    
+        if not wall_mode or (wall_mode and fill_bottom and l+1>bottom_layers):
+            print("Slicing Layer "+str(l))
+            travel_paths = travel_paths + fill_layer_with_fermat_spiral(t, shape, l*t.get_layer_height(), start_pnt=t.get_position(), wall_mode=wall_mode, walls=walls)
+        else:
+            travel_paths = travel_paths + fill_layer_with_fermat_spiral(t, shape, l*t.get_layer_height(), start_pnt=t.get_position())
+ 
     return travel_paths
 
 
@@ -771,7 +776,7 @@ def fill_layer_with_spiral(t, shape, z, start_pnt):
 
 def slice_spiral_fill(t, shape):
     travel_paths = []
-    layers = int(math.floor(get_shape_height(shape) / t.get_layer_height()))
+    layers = int(math.floor(get_shape_height(shape) / t.get_layer_height())) + 1
     for l in range(layers):
         print("Slicing Layer "+str(l))
         travel_paths = travel_paths + fill_layer_with_spiral(t, shape, l*t.get_layer_height(), t.get_position())
@@ -822,7 +827,7 @@ def fill_layer_with_contours(t, shape, z):
 
 def slice_contour_fill(t, shape):
     travel_paths = []
-    layers = int(math.floor(get_shape_height(shape) / t.get_layer_height()))
+    layers = int(math.floor(get_shape_height(shape) / t.get_layer_height())) + 1
     for l in range(layers):
         print("Slicing Layer "+str(l))
         travel_paths = travel_paths + fill_layer_with_contours(t, shape, l*t.get_layer_height())
