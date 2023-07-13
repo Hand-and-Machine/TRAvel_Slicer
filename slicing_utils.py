@@ -107,9 +107,16 @@ def get_isocontours(t, curve, parent, precision, wall_mode=False, walls=3):
 
 
 def get_isocontour(t, curve, precision):
-    if not (curve and rs.IsCurveClosed(curve)):
-        print("Error: get_isocontours called with not a closed curve: ", curve)
+    offset = t.get_extrude_width()
+    if not curve:
+        print("Error: get_isocontours not called with a curve", curve)
         return None
+    elif not rs.IsCurveClosed(curve):
+        if rs.IsCurveClosable(curve, offset*1.5):
+            curve = rs.CloseCurve(curve, offset*1.5)
+        else:
+            print("Error: get_isocontours called with an unclosable curve: ", curve)
+            return None
 
     num_pnts = int(rs.CurveLength(curve)*precision)
 
@@ -118,7 +125,6 @@ def get_isocontour(t, curve, precision):
         return None
 
     points = rs.DivideCurve(curve, num_pnts)
-    offset = t.get_extrude_width()
     winding_order, direction = get_winding_order(t, curve, points)
 
     if winding_order == None:
@@ -669,6 +675,13 @@ def fill_layer_with_fermat_spiral(t, shape, z, start_pnt=None, wall_mode=False, 
     # if there is more than one curve when intersecting
     # with the plane, we will have travel paths between them
     curves = rs.AddSrfContourCrvs(shape, plane)
+
+    # make sure the calculation of the intersection wasn't weird;
+    # sometimes calling AddSrfCountourCrvs gives two curves when
+    # it should be a single curve
+    if not all([rs.IsCurveClosed(curve) for curve in curves]):
+        # try to combine/repair closed curves?
+        print("Error: Mesh may need to be repaired or reduced")
 
     # slice the shape
     print("Generating Isocontours")
