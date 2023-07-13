@@ -705,8 +705,8 @@ def fill_layer_with_fermat_spiral(t, shape, z, start_pnt=None, wall_mode=False, 
         print("Spiralling Regions")
         for n in all_nodes:
             if len(n.get('curves')) > 0:
+                num_pnts = int(rs.CurveLength(n['curves'][0])*precision)
                 if n['type'] == 1:
-                    num_pnts = int(rs.CurveLength(n['curves'][0])*precision)
                     start_idx = None
                     if start_pnt:
                         start_idx = closest_point(start_pnt, rs.DivideCurve(n['curves'][0], num_pnts))
