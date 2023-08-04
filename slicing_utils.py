@@ -5,44 +5,8 @@ import extruder_turtle
 import turtle_utilities as tu
 from extruder_turtle import *
 
-
-def get_size(shape):
-    # bounding box of shape
-    bb = rs.BoundingBox(shape)
-    size = rs.Distance(bb[0], bb[2])
-    return size
-
-
-def get_shape_height(shape):
-    # bounding box of shape
-    bb = rs.BoundingBox(shape)
-    height = rs.Distance(bb[0], bb[4])
-    return height
-
-
-def get_plane(z):
-    return rs.PlaneFromNormal([0, 0, z], [0, 0, 1])
-
-
-def get_surface(curve, z):
-    size = get_size(curve)*2
-
-    points = []
-    points.append(rs.CreatePoint(-size,-size,z))
-    points.append(rs.CreatePoint(-size,size,z))
-    points.append(rs.CreatePoint(size,size,z))
-    points.append(rs.CreatePoint(size,-size,z))
-    surface = rs.AddSrfPt(points)
-    return surface
-
-
-def get_precision(t, curve):
-    resolution = t.get_resolution()
-    points = rs.DivideCurve (curve, 100)
-    ll = tu.line_length(points)
-    num_points = int(ll/resolution)+1
-    return num_points
-
+import geometry_utils
+from geometry_utils import *
 
 def closest_point(point, points):
     closest = {"point": None, "distance": 1000000}
@@ -89,8 +53,8 @@ def get_corner(t, outer_curve, inner_curve, points):
     return closest["point"]
 
 
-def get_isocontours(t, curve, parent, precision, wall_mode=False, walls=3):
-    new_curves = get_isocontour(t, curve, precision)
+def get_isocontours(t, curve, parent, wall_mode=False, walls=3):
+    new_curves = get_isocontour(t, curve)
     if not new_curves:
         return []
     else:
@@ -100,13 +64,13 @@ def get_isocontours(t, curve, parent, precision, wall_mode=False, walls=3):
             for c in new_curves:
                 node = {"guid":c, "depth":new_depth, "parent":parent, "children":[]}
                 parent["children"].append(node)
-                new_new_curves = get_isocontours(t, c, node, precision, wall_mode=wall_mode, walls=walls)
+                new_new_curves = get_isocontours(t, c, node, wall_mode=wall_mode, walls=walls)
                 for nc in new_new_curves:
                     curves.append(nc)
         return curves
 
 
-def get_isocontour(t, curve, precision):
+def get_isocontour(t, curve):
     offset = t.get_extrude_width()
     if not curve:
         print("Error: get_isocontours not called with a curve", curve)
@@ -118,7 +82,7 @@ def get_isocontour(t, curve, precision):
             print("Error: get_isocontours called with an unclosable curve: ", curve)
             return None
 
-    num_pnts = int(rs.CurveLength(curve)*precision)
+    num_pnts = int(rs.CurveLength(curve)/(offset/10))
 
     if num_pnts <= 5:
         print("Error: precision too low or curve too small")
@@ -175,9 +139,9 @@ def get_isocontour(t, curve, precision):
                         sequences.append([])
 
             # remove sequences that consist of a single point
-            for seq in sequences:
-                if len(seq) <= 1:
-                    sequences.remove(seq)
+            #for seq in sequences:
+                #if len(seq) <= 1:
+                    #sequences.remove(seq)
 
             # get start and end points of all sequences
             start = [seq[0] for seq in sequences]
@@ -189,9 +153,10 @@ def get_isocontour(t, curve, precision):
             connections = {j: (None, 100000) for j in end}
             for i in start:
                 for j in end:
-                    dist = rs.Distance(new_points[i], new_points[j])
-                    if dist < connections[j][1]:
-                        connections[j] = (i, dist)
+                    if i!=j:
+                        dist = rs.Distance(new_points[i], new_points[j])
+                        if dist < connections[j][1]:
+                            connections[j] = (i, dist)
 
             # get rid of distances now that
             # connections have been made
@@ -231,9 +196,9 @@ def get_isocontour(t, curve, precision):
             # Transform point lists into curves
             curves = [rs.AddCurve(c) for c in curves if len(c) > 5]
 
-            return curves
+            return curves #, new_points, discarded_points
         else:
-            return [rs.AddCurve(new_points + [new_points[0]])]
+            return [rs.AddCurve(new_points + [new_points[0]])] #, new_points, discarded_points
     else:
         return None
 
@@ -263,16 +228,16 @@ def get_winding_order(t, curve, points):
     return winding_order, direction
 
 
-def spiral_contours(t, isocontours, precision, start_index):
+def spiral_contours(t, isocontours, start_index):
     if len(isocontours) == 0:
         print("Error: no isocontours passed in")
         return
     # a single spirallable region
     # connect each isocontour with the one succeeding it
     spiral = []
-    num_pnts = int(rs.CurveLength(isocontours[0])*precision)
-    points = rs.DivideCurve(isocontours[0], num_pnts)
     offset = t.get_extrude_width()
+    num_pnts = int(rs.CurveLength(isocontours[0])/(offset/10))
+    points = rs.DivideCurve(isocontours[0], num_pnts)
 
     # choose appropriate starting index on outermost contour
     # get center point of innermost contour to compare
@@ -315,7 +280,7 @@ def spiral_contours(t, isocontours, precision, start_index):
         # find closest point in next contour to the break point
         # if we are not at the centermost contour
         if i < len(isocontours) - 1:
-            num_pnts = int(rs.CurveLength(isocontours[i+1])*precision)
+            num_pnts = int(rs.CurveLength(isocontours[i+1])/(offset/10))
             next_points = rs.DivideCurve(isocontours[i+1], num_pnts)
             closest = {"point": None, "distance": 1000000}
             for j in range(len(next_points)):
@@ -447,10 +412,12 @@ def fill_region(region_node, node, idx):
     # we have found a split and need to add a new node
     elif len(node["children"]) > 1:
         # add new region node and curve to the new region
-        new_node = {"guid":region_node["guid"]+"_"+str(idx), "curves":[], "parent":region_node, "children":[]}
-        new_node["curves"].append(node["guid"])
+        new_node = region_node
+        if len(region_node['curves']) > 0:
+            new_node = {"guid":region_node["guid"]+"_"+str(idx), "curves":[], "parent":region_node, "children":[]}
+            region_node["children"].append(new_node)
 
-        region_node["children"].append(new_node)
+        new_node["curves"].append(node["guid"])
 
         idx = 0
         for child in node["children"]:
@@ -528,7 +495,7 @@ def get_marching_order(node, start, end):
 
     other_idx = len(node['fermat_spiral'])-1
     if node.get('parent'):
-        other_idx = next(idx for idx in node['connection'][node['parent']['guid']] if idx != start)    
+        other_idx = next(idx for idx in node['connection'][node['parent']['guid']] if idx != start)
 
     marching_order = []
     reverse_marching_order = []
@@ -685,14 +652,13 @@ def fill_layer_with_fermat_spiral(t, shape, z, start_pnt=None, wall_mode=False, 
 
     # slice the shape
     print("Generating Isocontours")
-    precision = 300 / 60
 
     root = {"guid": "root", "depth": 0, "children":[]}
     isocontours = [] + curves
     for curve in curves:
         node = {"guid": curve, "depth": root["depth"]+1, "parent": root, "children":[]}
         root["children"].append(node)
-        new_curves = get_isocontours(t, curve, node, precision, wall_mode, walls)
+        new_curves = get_isocontours(t, curve, node, wall_mode, walls)
         if new_curves:
             isocontours = isocontours + new_curves
 
@@ -705,12 +671,12 @@ def fill_layer_with_fermat_spiral(t, shape, z, start_pnt=None, wall_mode=False, 
         print("Spiralling Regions")
         for n in all_nodes:
             if len(n.get('curves')) > 0:
-                num_pnts = int(rs.CurveLength(n['curves'][0])*precision)
+                num_pnts = int(rs.CurveLength(n['curves'][0])/(t.get_extrude_width()/10))
                 if n['type'] == 1:
                     start_idx = None
                     if start_pnt:
                         start_idx = closest_point(start_pnt, rs.DivideCurve(n['curves'][0], num_pnts))
-                    spiral, indices = spiral_contours(t, n["curves"], precision, start_idx)
+                    spiral, indices = spiral_contours(t, n["curves"], start_idx)
                     n["fermat_spiral"] = fermat_spiral(t, spiral, indices)
                 elif n['type'] == 2:
                     n['fermat_spiral'] = rs.DivideCurve(n["curves"][0], num_pnts)
@@ -733,8 +699,8 @@ def slice_fermat_fill(t, shape, wall_mode=False, walls=3, fill_bottom=False, bot
     travel_paths = []
     layers = int(math.floor(get_shape_height(shape) / t.get_layer_height())) + 1
     for l in range(layers):
+        print("Slicing Layer "+str(l))
         if not wall_mode or (wall_mode and fill_bottom and l+1>bottom_layers):
-            print("Slicing Layer "+str(l))
             travel_paths = travel_paths + fill_layer_with_fermat_spiral(t, shape, l*t.get_layer_height(), start_pnt=t.get_position(), wall_mode=wall_mode, walls=walls)
         else:
             travel_paths = travel_paths + fill_layer_with_fermat_spiral(t, shape, l*t.get_layer_height(), start_pnt=t.get_position())
@@ -752,13 +718,12 @@ def fill_layer_with_spiral(t, shape, z, start_pnt=None):
 
     # slice the shape
     print("Generating Isocontours")
-    precision = 300/60
     root = {"guid": "root", "depth": 0, "children":[]}
     isocontours = [] + curves
     for curve in curves:
         node = {"guid": curve, "depth": root["depth"]+1, "parent": root, "children":[]}
         root["children"].append(node)
-        new_curves = get_isocontours(t, curve, node, precision)
+        new_curves = get_isocontours(t, curve, node)
         if new_curves:
             isocontours = isocontours + new_curves
 
@@ -771,12 +736,12 @@ def fill_layer_with_spiral(t, shape, z, start_pnt=None):
     for node in all_nodes:
         if 'root' in node['curves']: node['curves'].remove('root')
         if len(node['curves']) > 0:
-            num_pnts = int(rs.CurveLength(node['curves'][0])*precision)
+            num_pnts = int(rs.CurveLength(n['curves'][0])/(t.get_extrude_width()/10))
             if node['type'] == 1:
                 start_idx = None
                 if start_pnt:
                     start_idx = closest_point(start_pnt, rs.DivideCurve(node['curves'][0], num_pnts))
-                spiral, indices = spiral_contours(t, node["curves"], precision, start_idx)
+                spiral, indices = spiral_contours(t, node["curves"], start_idx)
                 t.pen_up()
                 travel_paths.append(rs.AddCurve([t.get_position(), spiral[0]]))
                 t.set_position(spiral[0].X, spiral[0].Y, spiral[0].Z)
@@ -815,17 +780,16 @@ def fill_layer_with_contours(t, shape, z):
 
     # slice the shape
     print("Generating Isocontours")
-    precision = 300/60
     root = {"guid": "root", "depth": 0, "children":[]}
     isocontours = [] + curves
     for curve in curves:
         node = {"guid": curve, "depth": root["depth"]+1, "parent": root, "children":[]}
         root["children"].append(node)
-        new_curves = get_isocontours(t, curve, node, precision)
+        new_curves = get_isocontours(t, curve, node)
         if new_curves:
             isocontours = isocontours + new_curves
 
-    isocontours = [rs.DivideCurve(i, int(rs.CurveLength(i)*precision)) for i in isocontours]
+    isocontours = [rs.DivideCurve(i, int(rs.CurveLength(i)/(t.get_extrude_width()/10))) for i in isocontours]
 
     travel_paths = []
     start_idx = 0
