@@ -88,4 +88,4 @@ def group_by_height(node, super_node, height, idx=0):
         for child in node.children:
             group_by_height(child, s_node, height, idx)
             idx = idx + 1
-    
+
