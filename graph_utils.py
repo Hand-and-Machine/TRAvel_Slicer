@@ -1,7 +1,7 @@
 class Graph:
     def __init__(self):
         self.nodes = []
-        self.edges = []
+        self.edges = {}
         self.starts = []
 
     def add_node(self, node):
@@ -12,15 +12,20 @@ class Graph:
             self.edges[node] = []
 
     def add_edge(self, edge):
-        if edge.start not in self.nodes or edge.end not in self.nodes:
-            raise ValueError("Nodes not in graph")
+        if edge.start not in self.nodes:
+            raise ValueError("Node not in graph " + str(edge.start.data))
+        if edge.end not in self.nodes:
+            raise ValueError("Node not in graph " + str(edge.end.data))
         elif edge.end not in self.edges[edge.start]:
             self.edges[edge.start].append(edge.end)
+
+    def get_node(self, data):
+        for node in self.nodes:
+            if node.data == data: return node
 
     def get_shortest_hamiltonian_path(self):
         paths = self.get_all_hamiltonian_paths()
         return paths.sorted(key=lambda path: path[1])[-1]
-
 
     def get_all_hamiltonian_paths(self):
         paths = []
@@ -31,8 +36,8 @@ class Graph:
                 self.get_hamiltonian_paths(([start], 0), paths)
         
         return paths
-    
-    def get_hamiltonian_paths(self, path, paths=[]):
+
+    def get_hamiltonian_paths(self, path, paths):
         print(path)
         if all([node in path[0] for node in self.nodes]):
             paths.append(path)
@@ -44,11 +49,13 @@ class Graph:
 
         return paths
 
-class Node:
+
+class Graph_Node:
     def __init__(self, data):
         self.data = data
 
-class Edge:
+
+class Graph_Edge:
     def __init__(self, start, end):
         self.end = end
         self.start = start

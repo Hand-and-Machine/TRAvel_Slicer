@@ -14,7 +14,8 @@ def get_shape_height(shape):
     height = rs.Distance(bb[0], bb[4])
     return height
 
-def xy_bbox_overlap(crv1, crv2):
+
+def xy_bbox_overlap(crv1, crv2, width=0):
     # do bounding boxes of shape overlap in XY plane
     bb1 = rs.BoundingBox(crv1)
     minX1 = bb1[0].X
@@ -26,8 +27,7 @@ def xy_bbox_overlap(crv1, crv2):
     minY2 = bb2[0].Y
     maxX2 = bb2[2].X
     maxY2 = bb2[2].Y
-    
-    return minX1 < maxX2 and maxX1 > minX2 and minY1 < maxY2 and maxY1 > minY2
+    return minX1-width/2 < maxX2+width/2 and maxX1+width/2 > minX2-width/2 and minY1-width/2 < maxY2+width/2 and maxY1+width/2 > minY2-width/2
 
 
 def get_plane(z):

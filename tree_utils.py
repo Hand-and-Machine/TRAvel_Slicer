@@ -4,13 +4,14 @@ class Node:
         self.type = None
         self.depth = None
         self.height = None
+        self.overlap = []
         self.parents = []
         self.children = []
         self.sub_nodes = []
         self.needs_support = None
 
     def dfs(self, list=[]):
-        list.append(self.data)
+        if self not in list: list.append(self)
         for child in self.children:
             child.dfs(list)
         return list
@@ -27,28 +28,23 @@ class Node:
         
         return list
 
-    def nodes_at_depth(self, depth=0, list=[]):
-        print(depth)
-        nodes = self.get_all_nodes()
-        print(nodes)
-
-    def get_all_nodes(self, list=[]):
+    def get_all_nodes(self, list):
         if self not in list: list.append(self)
         for child in self.children:
             child.get_all_nodes(list)
         for parent in self.parents:
             if parent not in list:
-                parent.get_all_nodes_above(list)
+                parent.get_all_ancestors(list)
         return list
 
-    def get_all_nodes_below(self, list=[]):
+    def get_all_descendants(self, list):
         if self not in list: list.append(self)
         for child in self.children:
-            child.get_all_nodes_below(list)
+            child.get_all_descendants(list)
         return list
 
-    def get_all_nodes_above(self, list=[]):
+    def get_all_ancestors(self, list):
         if self not in list: list.append(self)
         for parent in self.parents:
-            parent.get_all_nodes_above(list)
+            parent.get_all_ancestors(list)
         return list
