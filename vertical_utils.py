@@ -14,26 +14,51 @@ from graph_utils import *
 import geometry_utils
 from geometry_utils import *
 
+def test_graph():
+    test = Graph()
+    a = Graph_Node("A")
+    b = Graph_Node("B")
+    c = Graph_Node("C")
+    d = Graph_Node("D")
+    test.add_node(a)
+    test.add_node(b)
+    test.add_node(c)
+    test.add_node(d)
+    test.add_edge(Graph_Edge(a, b, 3))
+    test.add_edge(Graph_Edge(a, d, 5))
+    test.add_edge(Graph_Edge(a, c, 3))
+    test.add_edge(Graph_Edge(b, a, 1))
+    test.add_edge(Graph_Edge(b, c, 2))
+    test.add_edge(Graph_Edge(b, d, 1))
+    test.add_edge(Graph_Edge(c, a, 1))
+    test.add_edge(Graph_Edge(c, b, 3))
+    test.add_edge(Graph_Edge(c, d, 2))
+    test.add_edge(Graph_Edge(d, a, 5))
+    test.add_edge(Graph_Edge(d, b, 4))
+    test.add_edge(Graph_Edge(d, c, 0))
+
+    test.starts.append(a)
+    path = test.get_shortest_hamiltonian_path()
+    print([node.data for node in path[0]], path[1])
+
 def best_vertical_path(t, shape):
     vert_tree = build_vertical_tree(t, shape)
     all_nodes = vert_tree.get_all_nodes([])
-    #all_nodes = sorted(root.get_all_nodes([]), key=lambda x: x.sub_nodes[-1].height)
-    #for n in all_nodes:
-        #print(n.data, n.depth, n.height, len(n.sub_nodes))
 
     nozzle_height = 30 #height of nozzle in mm
-    height = int(math.floor(get_shape_height(shape) / nozzle_height))
-    for h in range(height):
+    height = get_shape_height(shape)
+    for h in range(int(math.floor(height / nozzle_height))+1):
         nodes_at_height = [node for node in all_nodes if node.height == h]
 
         # create a graph for this height chunk
         height_graph = Graph()
         # add nodes to graph for every super node within the height chunk
         for node in nodes_at_height:
-            height_graph.add_node(Graph_Node(node))
-
-        # add start nodes to the graph
-        # TODO
+            graph_node = Graph_Node(node)
+            height_graph.add_node(graph_node)
+            # add start nodes to the graph
+            if node.sub_nodes[0].height % nozzle_height == 0:
+                height_graph.starts.append(graph_node)
 
         # add edges to graph
         # edges related to height dependency
@@ -41,7 +66,7 @@ def best_vertical_path(t, shape):
             node1 = graph_node.data
             for child in node1.children:
                 if child in nodes_at_height:
-                    height_graph.add_edge(Graph_Edge(graph_node, height_graph.get_node(child)))
+                    height_graph.add_edge(Graph_Edge(graph_node, height_graph.get_node(child), 0))
 
             # edges related to travel between nodes
             siblings_and_counsins = [n for n in nodes_at_height if n not in node1.get_all_descendants([]) + node1.get_all_ancestors([])]
@@ -49,15 +74,18 @@ def best_vertical_path(t, shape):
                 # do not add edge if there is overlap
                 if not is_overlapping(node1, node2):
                     # compute travel between start points
-                    height_graph.add_edge(Graph_Edge(graph_node, height_graph.get_node(node2)))
+                    height_graph.add_edge(Graph_Edge(graph_node, height_graph.get_node(node2), 0))
 
-        print('Graph', len(height_graph.nodes))
+        num_edges = 0
+        for n in height_graph.edges:
+            num_edges = num_edges + len(height_graph.edges[n].keys())
+        print(len(height_graph.nodes), num_edges)
+        #print('shortest path', height_graph.get_shortest_hamiltonian_path())
 
     return vert_tree
 
 def build_vertical_tree(t, shape):
     layers = int(math.floor(get_shape_height(shape) / t.get_layer_height())) + 1
-    print("Number of Layers", layers)
     root = Node('root')
 
     previous_nodes = [root]
@@ -118,7 +146,7 @@ def group_by_height(node, super_node, height, idx=0):
 
         s_node = new_super
     elif node.depth // height < super_node.height:
-        print("Error, node should not be below current super_node")
+        raise ValueError("Error, node should not be below current super_node")
 
     idx = 0
     if len(node.children) > 1:
@@ -158,6 +186,8 @@ def subdivide_by_overlap(nodes, width):
             other_nodes = node1.get_all_ancestors([]) + node1.get_all_descendants([])
 
             # if node2 within height chunk is a sibling or cousin
+            overlap_above = False
+            overlap_below = False
             if node2 not in other_nodes:
                 for s1 in node1.sub_nodes:
                     for s2 in node2.sub_nodes:
