@@ -41,11 +41,14 @@ def test_graph():
     path = test.get_shortest_hamiltonian_path()
     print([node.data for node in path[0]], path[1])
 
+
 def best_vertical_path(t, shape):
     vert_tree = build_vertical_tree(t, shape)
     all_nodes = vert_tree.get_all_nodes([])
 
-    nozzle_height = 30 #height of nozzle in mm
+    path = []
+    nozzle_width = 8 # maximum width of nozzle
+    nozzle_height = 30 # height of nozzle in mm
     height = get_shape_height(shape)
     for h in range(int(math.floor(height / nozzle_height))+1):
         nodes_at_height = [node for node in all_nodes if node.height == h]
@@ -65,6 +68,7 @@ def best_vertical_path(t, shape):
         for graph_node in height_graph.nodes:
             node1 = graph_node.data
             for child in node1.children:
+                print(node1.data, child.data)
                 if child in nodes_at_height:
                     height_graph.add_edge(Graph_Edge(graph_node, height_graph.get_node(child), 0))
 
@@ -72,17 +76,20 @@ def best_vertical_path(t, shape):
             siblings_and_counsins = [n for n in nodes_at_height if n not in node1.get_all_descendants([]) + node1.get_all_ancestors([])]
             for node2 in siblings_and_counsins:
                 # do not add edge if there is overlap
-                if not is_overlapping(node1, node2):
-                    # compute travel between start points
-                    height_graph.add_edge(Graph_Edge(graph_node, height_graph.get_node(node2), 0))
+                if not is_overlapping(node1, node2, nozzle_width):
+                    # compute travel between curves, where weight is set as
+                    # distance between center of start and end curves within node
+                    weight = rs.Distance(rs.CurveAreaCentroid(node.sub_nodes[-1].data)[0], rs.CurveAreaCentroid(node2.sub_nodes[0].data)[0])
+                    height_graph.add_edge(Graph_Edge(graph_node, height_graph.get_node(node2), weight))
 
         num_edges = 0
         for n in height_graph.edges:
             num_edges = num_edges + len(height_graph.edges[n].keys())
         print(len(height_graph.nodes), num_edges)
-        #print('shortest path', height_graph.get_shortest_hamiltonian_path())
+        path = path + height_graph.get_shortest_hamiltonian_path()[0]
 
-    return vert_tree
+    return vert_tree, path
+
 
 def build_vertical_tree(t, shape):
     layers = int(math.floor(get_shape_height(shape) / t.get_layer_height())) + 1
@@ -177,38 +184,55 @@ def divide_by_overlap(super_root, total_height):
 
 
 def subdivide_by_overlap(nodes, width):
+    splits = {}
     for n1 in range(len(nodes)):
         # check each sub-layer within the node to see if it overlaps with other
         # nodes' layers, if those nodes are siblings or cousins of the node
-        for n2 in range(n1+1, len(nodes)):
-            node1 = nodes[n1]
+        node1 = nodes[n1]
+        splits[node1] = []
+        for n2 in range(len(nodes)):
             node2 = nodes[n2]
             other_nodes = node1.get_all_ancestors([]) + node1.get_all_descendants([])
 
             # if node2 within height chunk is a sibling or cousin
-            overlap_above = False
-            overlap_below = False
-            if node2 not in other_nodes:
+            if node1 != node2 and node2 not in other_nodes:
+                #print('')
+                #print(node1.data, node2.data)
+                in_an_above = False
+                in_a_below = False
+                prev_above = False
+                prev_below = False
+
                 for s1 in node1.sub_nodes:
+                    above = False
+                    below = False
                     for s2 in node2.sub_nodes:
                         if xy_bbox_overlap(s1.data, s2.data, width):
-                            if s2 not in s1.overlap:
-                                s1.overlap.append(s2)
-                            if s1 not in s2.overlap:
-                                s2.overlap.append(s1)
+                            if s1.height > s2.height:
+                                above = True
+                            if s1.height < s2.height:
+                                below = True
 
-    for n1 in range(len(nodes)):
-        node1 = nodes[n1]
+                    #print('')
+                    #print(s1.height)
+                    #print("above", above)
+                    #print("below", below)
 
-        splits = []
-        for s1 in range(1, len(node1.sub_nodes)):
-            sub0 = node1.sub_nodes[s1-1]
-            sub1 = node1.sub_nodes[s1]
-            if set(sub0.overlap) != set(sub1.overlap):
-                splits.append(sub0.height)
+                    if above != prev_above or below != prev_below:
+                        if (in_a_below and in_an_above) or (above and in_a_below) or (below and in_an_above):
+                            #print('SPLIT')
+                            splits[node1].append(s1.height-1)
 
-        for split in splits:
-            split_super_node_at_height(node1, split)
+                        if above or below or (in_a_below and in_an_above):
+                            in_a_below = below
+                            in_an_above = above
+
+                    prev_above = above
+                    prev_below = below
+
+    for node in splits:
+        for split in splits[node]:
+            split_super_node_at_height(node, split)
 
 
 def split_super_node_at_height(node, height):
@@ -217,6 +241,7 @@ def split_super_node_at_height(node, height):
     split_node.height = node.height
     split_node.children.append(node)
     split_node.parents = [p for p in node.parents]
+    print([n.data for n in split_node.parents])
     for p in split_node.parents:
         p.children.append(split_node)
         p.children.remove(node)
@@ -231,9 +256,9 @@ def split_super_node_at_height(node, height):
         d.depth = d.depth + 1
 
 
-def is_overlapping(node1, node2):
+def is_overlapping(node1, node2, width):
     for sub1 in node1.sub_nodes:
         for sub2 in node2.sub_nodes:
-            if sub1 in sub2.overlap and sub1.height > sub2.height:
+            if xy_bbox_overlap(sub1.data, sub2.data, width) and sub1.height > sub2.height:
                 return True
     return False
