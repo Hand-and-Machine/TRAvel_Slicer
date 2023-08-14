@@ -78,7 +78,7 @@ def best_vertical_path(t, shape):
                 if not is_overlapping(node1, node2, nozzle_width):
                     # compute travel between curves, where weight is set as
                     # distance between center of start and end curves within node
-                    weight = rs.Distance(rs.CurveAreaCentroid(node.sub_nodes[-1].data)[0], rs.CurveAreaCentroid(node2.sub_nodes[0].data)[0])
+                    weight = rs.Distance(node.sub_nodes[-1].start_point, node2.sub_nodes[0].start_point)
                     height_graph.add_edge(Graph_Edge(graph_node, height_graph.get_node(node2), weight))
 
         num_edges = 0
@@ -113,7 +113,8 @@ def build_vertical_tree(t, shape):
             node = Node(curve)
             node.depth = l
             node.height = l
-            node.start_point = closest_point(center_point, rs.DivideCurve(curve, 100))
+            pnts = rs.DivideCurve(curve, 100)
+            node.start_point = pnts[closest_point(center_point, pnts)]
             new_nodes.append(node)
             if root in previous_nodes:
                 node.parents.append(root)
