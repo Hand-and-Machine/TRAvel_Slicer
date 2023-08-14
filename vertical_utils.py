@@ -43,7 +43,7 @@ def test_graph():
 
 
 def best_vertical_path(t, shape):
-    vert_tree = build_vertical_tree(t, shape)
+    vert_tree, center_points = build_vertical_tree(t, shape)
     all_nodes = vert_tree.get_all_nodes([])
 
     path = []
@@ -68,7 +68,6 @@ def best_vertical_path(t, shape):
         for graph_node in height_graph.nodes:
             node1 = graph_node.data
             for child in node1.children:
-                print(node1.data, child.data)
                 if child in nodes_at_height:
                     height_graph.add_edge(Graph_Edge(graph_node, height_graph.get_node(child), 0))
 
@@ -86,22 +85,26 @@ def best_vertical_path(t, shape):
         for n in height_graph.edges:
             num_edges = num_edges + len(height_graph.edges[n].keys())
         print(len(height_graph.nodes), num_edges)
+        height_graph.path_check = check_path
         path = path + height_graph.get_shortest_hamiltonian_path()[0]
 
-    return vert_tree, path
+    return vert_tree, path, center_points
 
 
 def build_vertical_tree(t, shape):
     layers = int(math.floor(get_shape_height(shape) / t.get_layer_height())) + 1
     root = Node('root')
 
+    center_points = []
     previous_nodes = [root]
     for l in range(layers):
         z = l*t.get_layer_height()
         plane = get_plane(z)
         curves = rs.AddSrfContourCrvs(shape, plane)
         new_nodes = []
+        center_point = rs.CreatePoint(0, 0, z)
         for curve in curves:
+            center_point = rs.PointAdd(center_point, rs.CurveAreaCentroid(curve)[0])
             node = Node(curve)
             node.depth = l
             node.height = l
@@ -117,9 +120,10 @@ def build_vertical_tree(t, shape):
             if len(node.parents) == 0: node.needs_support = True
             else: node.needs_support = False
 
+        center_points.append(rs.CreatePoint(center_point.X/len(curves), center_point.X/len(curves), center_point.Z/len(curves)))
         previous_nodes = new_nodes
 
-    return segment_tree_by_height(t, root, get_shape_height(shape))
+    return segment_tree_by_height(t, root, get_shape_height(shape)), center_points
 
 def segment_tree_by_height(t, tree, total_height):
     #nozzle_height = t.get_nozzle_height()
@@ -144,7 +148,7 @@ def group_by_height(node, super_node, height, idx=0):
         super_node.sub_nodes.append(node)
     elif node.depth // height > super_node.height:
         new_super = Node(str(super_node.data)+'_'+str(idx))
-        new_super.parent = super_node
+        new_super.parents = [super_node]
         new_super.depth = super_node.depth + 1
         new_super.height = node.depth // height
         new_super.sub_nodes.append(node)
@@ -159,7 +163,7 @@ def group_by_height(node, super_node, height, idx=0):
     if len(node.children) > 1:
         for child in node.children:
             new_new_super = Node(str(s_node.data)+'_'+str(idx))
-            new_new_super.parent = s_node
+            new_new_super.parents = [s_node]
             new_new_super.depth = s_node.depth + 1
             new_new_super.height = node.depth // height
             s_node.children.append(new_new_super)
@@ -241,7 +245,6 @@ def split_super_node_at_height(node, height):
     split_node.height = node.height
     split_node.children.append(node)
     split_node.parents = [p for p in node.parents]
-    print([n.data for n in split_node.parents])
     for p in split_node.parents:
         p.children.append(split_node)
         p.children.remove(node)
@@ -262,3 +265,10 @@ def is_overlapping(node1, node2, width):
             if xy_bbox_overlap(sub1.data, sub2.data, width) and sub1.height > sub2.height:
                 return True
     return False
+
+
+def check_path(next_node, path):
+    nozzle_width = 8 #max diameter of the nozzle in mm
+    for node in path:
+        if is_overlapping(node.data, next_node.data, nozzle_width): return False
+    return True

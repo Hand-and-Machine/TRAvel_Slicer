@@ -7,6 +7,7 @@ class Graph:
         self.count = 0
         self.count_limit = 1000
 
+        self.path_check = None
         self.min_weight = 1000000
 
     def add_node(self, node):
@@ -31,25 +32,25 @@ class Graph:
             if node.data == data: return node
 
     def get_shortest_hamiltonian_path(self):
-        print([node.data.data for node in self.nodes])
-        print([str(start.data.data)+' --'+str(int(self.edges[start][end]))+'--> '+str(end.data.data) for start in self.edges for end in self.edges[start]])
+        #print([node.data.data for node in self.nodes])
+        #print([str(start.data.data)+' --'+str(int(self.edges[start][end]))+'--> '+str(end.data.data) for start in self.edges for end in self.edges[start]])
         self.count = 0
-        paths = self.get_all_hamiltonian_paths()
+        paths = self.get_all_hamiltonian_paths(True)
         if len(paths) == 0:
             raise ValueError("Unable to find a hamiltonian path in graph")
         return sorted(paths, key=lambda path: path[1])[0]
 
-    def get_all_hamiltonian_paths(self):
+    def get_all_hamiltonian_paths(self, shortest=False):
         paths = []
         for start in self.starts:
             if start not in self.nodes:
                 raise ValueError("Node not in graph")
             else:
-                self.get_hamiltonian_paths(([start], 0), paths)
+                self.get_hamiltonian_paths(([start], 0), paths, shortest)
         
         return paths
 
-    def get_hamiltonian_paths(self, path, paths):
+    def get_hamiltonian_paths(self, path, paths, shortest=False):
         self.count = self.count + 1
         if self.count > self.count_limit:
             raise ValueError("Exceeded search limit")
@@ -61,8 +62,16 @@ class Graph:
 
         for end in self.edges[path[0][-1]].keys():
             weight = path[1]+self.edges[path[0][-1]][end]
-            if end not in path[0] and weight <= self.min_weight:
-                self.get_hamiltonian_paths((path[0]+[end], weight), paths)
+            # check that we have not already been to this graph node
+            if end not in path[0]:
+                # if we are looking for the shortest hamiltonian path, check
+                # that the weight of the current search is not greater than
+                # the least weighted path we have already traversed
+                if not shortest or (weight) <= self.min_weight:
+                    # if Graph has a function for checking the path to make sure
+                    # the traversal is "legal"
+                    if not self.path_check or (self.path_check and self.path_check(end, path[0])):
+                        self.get_hamiltonian_paths((path[0]+[end], weight), paths)
 
         return paths
 
