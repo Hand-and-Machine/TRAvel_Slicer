@@ -8,6 +8,7 @@ class Node:
         self.parents = []
         self.children = []
         self.sub_nodes = []
+        self.start_point = None
         self.needs_support = None
 
     def dfs(self, list=[]):

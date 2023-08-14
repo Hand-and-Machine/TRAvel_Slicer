@@ -101,13 +101,19 @@ def build_vertical_tree(t, shape):
         z = l*t.get_layer_height()
         plane = get_plane(z)
         curves = rs.AddSrfContourCrvs(shape, plane)
-        new_nodes = []
+
         center_point = rs.CreatePoint(0, 0, z)
         for curve in curves:
             center_point = rs.PointAdd(center_point, rs.CurveAreaCentroid(curve)[0])
+        center_point = rs.CreatePoint(center_point.X/len(curves), center_point.X/len(curves), center_point.Z/len(curves))
+        center_points.append(center_point)
+
+        new_nodes = []
+        for curve in curves:
             node = Node(curve)
             node.depth = l
             node.height = l
+            node.start_point = closest_point(center_point, rs.DivideCurve(curve, 100))
             new_nodes.append(node)
             if root in previous_nodes:
                 node.parents.append(root)
@@ -120,7 +126,6 @@ def build_vertical_tree(t, shape):
             if len(node.parents) == 0: node.needs_support = True
             else: node.needs_support = False
 
-        center_points.append(rs.CreatePoint(center_point.X/len(curves), center_point.X/len(curves), center_point.Z/len(curves)))
         previous_nodes = new_nodes
 
     return segment_tree_by_height(t, root, get_shape_height(shape)), center_points

@@ -44,3 +44,14 @@ def get_surface(curve, z):
     points.append(rs.CreatePoint(size,-size,z))
     surface = rs.AddSrfPt(points)
     return surface
+
+
+def closest_point(point, points):
+    closest = {"point": None, "distance": 1000000}
+    for p in range(len(points)):
+        dist = rs.Distance(point, points[p])
+        if dist < closest['distance']:
+            closest['distance'] = dist
+            closest['point'] = p
+    
+    return closest['point']

@@ -8,16 +8,6 @@ from extruder_turtle import *
 import geometry_utils
 from geometry_utils import *
 
-def closest_point(point, points):
-    closest = {"point": None, "distance": 1000000}
-    for p in range(len(points)):
-        dist = rs.Distance(point, points[p])
-        if dist < closest['distance']:
-            closest['distance'] = dist
-            closest['point'] = p
-    
-    return closest['point']
-
 
 def get_corner(t, outer_curve, inner_curve, points):
     offset = t.get_extrude_width()
