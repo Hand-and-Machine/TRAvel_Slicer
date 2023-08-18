@@ -96,7 +96,7 @@ def split_curve_at(curve, points, tolerance=0):
 
     for point in points:
         for crv in curves:
-            if closest_point(point, rs.DivideCurve(crv, int(rs.CurveLength(curve)/(tolerance/10))))[1] < tolerance:
+            if closest_point(point, rs.DivideCurve(crv, int(rs.CurveLength(curve)/(tolerance/4))))[1] < tolerance:
                 curves.remove(crv)
                 split_curves, split_ends = split_curve(crv, point, tolerance)
                 curves = curves + split_curves
@@ -106,7 +106,7 @@ def split_curve_at(curve, points, tolerance=0):
 
 
 def split_curve(curve, split_point, tolerance):
-    points = rs.DivideCurve(curve, int(rs.CurveLength(curve)/(tolerance/10)))
+    points = rs.DivideCurve(curve, int(rs.CurveLength(curve)/(tolerance/4)))
 
     # find closest point first
     closest_idx, dist = closest_point(split_point, points)

@@ -101,12 +101,13 @@ def build_vertical_tree(t, shape):
         z = l*t.get_layer_height()
         plane = get_plane(z)
         curves = rs.AddSrfContourCrvs(shape, plane)
+        outer_curve = sorted(curves, key=lambda x: rs.Area(x), reverse=True)[0]
 
         curve_groups = get_curve_groupings(curves)
 
         center_point = rs.CreatePoint(0, 0, z)
         for curves in curve_groups:
-            center_point = rs.PointAdd(center_point, rs.CurveAreaCentroid(curves[0])[0])
+            center_point = rs.PointAdd(center_point, rs.CurveAreaCentroid(outer_curve)[0])
         center_point = rs.CreatePoint(center_point.X/len(curve_groups), center_point.X/len(curve_groups), center_point.Z/len(curve_groups))
         center_points.append(center_point)
 
@@ -115,7 +116,7 @@ def build_vertical_tree(t, shape):
             node = Node(curves)
             node.depth = l
             node.height = l
-            pnts = rs.DivideCurve(curves[0], 100)
+            pnts = rs.DivideCurve(outer_curve, 100)
             node.start_point = pnts[closest_point(center_point, pnts)[0]]
             new_nodes.append(node)
             if root in previous_nodes:
@@ -123,7 +124,7 @@ def build_vertical_tree(t, shape):
                 root.children.append(node)
             else:
                 for prev_n in previous_nodes:
-                    if xy_bbox_overlap(prev_n.data, curves[0]):
+                    if xy_bbox_overlap(prev_n.data, outer_curve):
                         node.parents.append(prev_n)
                         prev_n.children.append(node)
             if len(node.parents) == 0: node.needs_support = True

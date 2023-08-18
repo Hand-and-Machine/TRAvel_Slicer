@@ -37,7 +37,7 @@ def get_corner(t, outer_curve, inner_curve, points):
             if angle < 160 and angle > 20:
                 dist = rs.Distance(pnt, center)
                 # check that the corner isn't "inverted"
-                inside = rs.PointInPlanarClosedCurve(rs.VectorAdd(pnt, rs.VectorScale(rs.VectorUnitize(add), offset/10)), outer_curve)
+                inside = rs.PointInPlanarClosedCurve(rs.VectorAdd(pnt, rs.VectorScale(rs.VectorUnitize(add), offset/4)), outer_curve)
                 if dist < closest["distance"] and inside:
                     closest["distance"] = dist
                     closest["point"] = p
@@ -74,7 +74,7 @@ def get_isocontour(t, curve):
             print("Error: get_isocontours called with an unclosable curve: ", curve)
             return None
 
-    num_pnts = int(rs.CurveLength(curve)/(offset/10))
+    num_pnts = int(rs.CurveLength(curve)/(offset/4))
 
     if num_pnts <= 5:
         print("Error: precision too low or curve too small")
@@ -228,7 +228,7 @@ def spiral_contours(t, isocontours, start_index):
     # connect each isocontour with the one succeeding it
     spiral = []
     offset = t.get_extrude_width()
-    num_pnts = int(rs.CurveLength(isocontours[0])/(offset/10))
+    num_pnts = int(rs.CurveLength(isocontours[0])/(offset/4))
     points = rs.DivideCurve(isocontours[0], num_pnts)
 
     # choose appropriate starting index on outermost contour
@@ -272,7 +272,7 @@ def spiral_contours(t, isocontours, start_index):
         # find closest point in next contour to the break point
         # if we are not at the centermost contour
         if i < len(isocontours) - 1:
-            num_pnts = int(rs.CurveLength(isocontours[i+1])/(offset/10))
+            num_pnts = int(rs.CurveLength(isocontours[i+1])/(offset/4))
             next_points = rs.DivideCurve(isocontours[i+1], num_pnts)
             closest = {"point": None, "distance": 1000000}
             for j in range(len(next_points)):
