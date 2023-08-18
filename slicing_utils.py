@@ -8,6 +8,8 @@ from extruder_turtle import *
 import geometry_utils
 from geometry_utils import *
 
+import graph_utils
+from graph_utils import *
 
 def get_corner(t, outer_curve, inner_curve, points):
     offset = t.get_extrude_width()
@@ -625,62 +627,188 @@ def get_connection_indices(t, node):
     return start_index, end_index
 
 
-def fill_layer_with_fermat_spiral(t, shape, z, start_pnt=None, wall_mode=False, walls=3):
-    # get outer curves of shape
-    plane = get_plane(z)
-    
-    # if there is more than one curve when intersecting
-    # with the plane, we will have travel paths between them
-    curves = rs.AddSrfContourCrvs(shape, plane)
+def connect_curves(t, curves):
+    # order curves by surface area, outermost curve will
+    # have the largest surface area
+    curves = sorted(curves, key=lambda x: rs.Area(x), reverse=True)
 
-    # make sure the calculation of the intersection wasn't weird;
-    # sometimes calling AddSrfCountourCrvs gives two curves when
-    # it should be a single curve
-    if not all([rs.IsCurveClosed(curve) for curve in curves]):
-        # try to combine/repair closed curves?
-        print("Error: Mesh may need to be repaired or reduced")
+    # find closest points between all curves
+    closest = {curve: None for curve in curves}
+    for c1 in range(len(curves)):
+        curve1 = curves[c1]
+        pnts1 = rs.DivideCurve(curve1, 100)
+
+        closest[curve1] = {}
+        for c2 in range(c1+1, len(curves)):
+            curve2 = curves[c2]
+            pnts2 = rs.DivideCurve(curve2, 100)
+
+            minimum = 100000
+            for pnt in pnts1:
+                idx, dist = closest_point(pnt, pnts2)
+                if dist < minimum:
+                    minimum = dist
+                    closest[curve1][curve2] = (pnt, pnts2[idx], dist)
+
+    # construct a fully connected graph where each curve
+    # represents a single node in the graph, and edges
+    # are the minimum distance between each curve
+    graph = Graph()
+    for c in range(len(curves)):
+        node = Graph_Node(curves[c])
+        node.name = 'c' + str(c)
+        graph.add_node(node)
+
+    for curve1 in closest:
+        for curve2 in closest[curve1]:
+            weight = closest[curve1][curve2][2]
+            node1 = graph.get_node(curve1)
+            node2 = graph.get_node(curve2)
+            graph.add_edge(Graph_Edge(node1, node2, weight))
+            graph.add_edge(Graph_Edge(node2, node1, weight))
+
+    #graph.print_graph_data()
+
+    # trim graph by ordering edges from most weighted to least
+    ordered_edges = get_edge_tuples(graph)
+
+    # remove edges, starting with most weighted and determine
+    # if nodes are still reachable from the start node
+    start_node = graph.get_node(curves[0])
+    for edge in ordered_edges:
+        node1 = edge[0]
+        node2 = edge[1]
+        weight = edge[2]
+        graph.edges[node1].pop(node2)
+        graph.edges[node2].pop(node1)
+
+        for node in graph.nodes:
+            if node != start_node:
+                if not graph.check_for_path(start_node, node)[0]:
+                    # add edge back if unable to reach all nodes
+                    # in graph from the start node (outermost curve)
+                    graph.add_edge(Graph_Edge(node1, node2, weight))
+                    graph.add_edge(Graph_Edge(node2, node1, weight))
+                    break
+
+    #graph.print_graph_data()
+    #min_edges = get_edge_tuples(graph)
+    #print([(tuple[0].name, tuple[1].name, tuple[2]) for tuple in min_edges])
+
+    # split curves at shortest connection points to other curves
+    new_curves = {}
+    curve_ends = {}
+    offset = t.get_extrude_width()
+    max_weight = 0
+    for node1 in graph.edges:
+        split_points = []
+        for node2 in graph.edges[node1]:
+            split_point, weight = get_connect_point(closest, node1, node2)
+            if weight > max_weight: max_weight = weight
+            split_points.append(split_point)
+
+        split_curves, split_ends = split_curve_at(node1.data, split_points, offset)
+        new_curves[node1] = split_curves
+        curve_ends[node1] = split_ends
+
+    all_curves = [curve for n in new_curves for curve in new_curves[n]]
+
+    # join new split curves together with lines between ends
+    min_edges = get_edge_tuples(graph)
+    for edge in min_edges:
+        node1 = edge[0]
+        node2 = edge[1]
+        connect_point_1, weight = get_connect_point(closest, node1, node2)
+        connect_point_2, weight = get_connect_point(closest, node2, node1)
+
+        ends1 = sorted([(end, rs.Distance(end, connect_point_1)) for end in curve_ends[node1]], key=lambda x: x[1])
+        pnt1_1 = ends1[0][0]
+        pnt1_2 = ends1[1][0]
+        ends2 = sorted([(end, rs.Distance(end, connect_point_2)) for end in curve_ends[node2]], key=lambda x: x[1])
+        pnt2_1 = ends2[0][0]
+        pnt2_2 = ends2[1][0]
+
+        if rs.Distance(pnt1_1, pnt2_1) < rs.Distance(pnt1_1, pnt2_2):
+            all_curves.append(rs.AddCurve([pnt1_1, pnt2_1]))
+            all_curves.append(rs.AddCurve([pnt1_2, pnt2_2]))
+        else:
+            all_curves.append(rs.AddCurve([pnt1_1, pnt2_2]))
+            all_curves.append(rs.AddCurve([pnt1_2, pnt2_1]))
+
+    return rs.JoinCurves(all_curves)
+
+
+def get_connect_point(closest, node1, node2):
+    split_point = None
+    connection = closest[node1.data].get(node2.data)
+    if connection:
+        split_point = connection[0]
+    else:
+        connection = closest[node2.data].get(node1.data)
+        split_point = connection[1]
+
+    weight = connection[2]
+    return split_point, weight
+
+
+def get_edge_tuples(graph):
+    ordered_edges = []
+    for node1 in graph.edges:
+        for node2 in graph.edges[node1]:
+            weight = graph.edges[node1][node2]
+            if (node1, node2, weight) not in ordered_edges and (node2, node1, weight) not in ordered_edges:
+                ordered_edges.append((node1, node2, weight))
+
+    return sorted(ordered_edges, key=lambda x: x[2], reverse=True)
+
+
+def fill_curves_with_fermat_spiral(t, curves, start_pnt=None, wall_mode=False, walls=3):    
+    # connect curves if given more than one
+    curve = curves[0]
+    if len(curves) > 1:
+        curve = connect_curves(t, curves)
 
     # slice the shape
     print("Generating Isocontours")
 
-    root = {"guid": "root", "depth": 0, "children":[]}
-    isocontours = [] + curves
-    for curve in curves:
-        node = {"guid": curve, "depth": root["depth"]+1, "parent": root, "children":[]}
-        root["children"].append(node)
-        new_curves = get_isocontours(t, curve, node, wall_mode, walls)
-        if new_curves:
-            isocontours = isocontours + new_curves
+    root = {"guid": curve, "depth": 0, "children":[]}
+    isocontours = [] + [curve]
+    new_curves = get_isocontours(t, curve, root, wall_mode, walls)
+    if new_curves:
+        isocontours = isocontours + new_curves
 
     travel_paths = []
-    for child in root['children']:
-        region_tree = segment_tree(child)
-        set_node_types(region_tree)
-        all_nodes = get_all_nodes(region_tree)
 
-        print("Spiralling Regions")
-        for n in all_nodes:
-            if len(n.get('curves')) > 0:
-                num_pnts = int(rs.CurveLength(n['curves'][0])/(t.get_extrude_width()/10))
-                if n['type'] == 1:
-                    start_idx = None
-                    if start_pnt:
-                        start_idx = closest_point(start_pnt, rs.DivideCurve(n['curves'][0], num_pnts))
-                    spiral, indices = spiral_contours(t, n["curves"], start_idx)
-                    n["fermat_spiral"] = fermat_spiral(t, spiral, indices)
-                elif n['type'] == 2:
-                    n['fermat_spiral'] = rs.DivideCurve(n["curves"][0], num_pnts)
-            else:
-                print("Error: node with no curves in it at all", n)
+    region_tree = segment_tree(root)
+    set_node_types(region_tree)
+    all_nodes = get_all_nodes(region_tree)
 
-        print("Connecting Spiralled Regions")
-        final_spiral = connect_spiralled_nodes(t, region_tree)
-        t.pen_up()
-        travel_paths.append(rs.AddCurve([t.get_position(), final_spiral[0]]))
-        t.set_position(final_spiral[0].X, final_spiral[0].Y, final_spiral[0].Z)
-        t.pen_down()
-        for p in final_spiral:
-            t.set_position(p.X, p.Y, p.Z)
+    print("Spiralling Regions")
+    for n in all_nodes:
+        if len(n.get('curves')) > 0:
+            num_pnts = int(rs.CurveLength(n['curves'][0])/(t.get_extrude_width()/10))
+            print("number of points", num_pnts)
+            if n['type'] == 1:
+                start_idx = None
+                if start_pnt:
+                    print(n['curves'][0])
+                    print(start_pnt)
+                    start_idx, d = closest_point(start_pnt, rs.DivideCurve(n['curves'][0], num_pnts))
+                spiral, indices = spiral_contours(t, n["curves"], start_idx)
+                n["fermat_spiral"] = fermat_spiral(t, spiral, indices)
+            elif n['type'] == 2:
+                n['fermat_spiral'] = rs.DivideCurve(n["curves"][0], num_pnts)
+        else:
+            print("Error: node with no curves in it at all", n)
+
+    print("Connecting Spiralled Regions")
+    final_spiral = connect_spiralled_nodes(t, region_tree)
+    t.pen_up()
+    travel_paths.append(rs.AddCurve([t.get_position(), final_spiral[0]]))
+    t.set_position(final_spiral[0].X, final_spiral[0].Y, final_spiral[0].Z)
+    t.pen_down()
+    for p in final_spiral:
+        t.set_position(p.X, p.Y, p.Z)
 
     return travel_paths
 
@@ -690,10 +818,13 @@ def slice_fermat_fill(t, shape, wall_mode=False, walls=3, fill_bottom=False, bot
     layers = int(math.floor(get_shape_height(shape) / t.get_layer_height())) + 1
     for l in range(layers):
         print("Slicing Layer "+str(l))
+        plane = get_plane(l*t.get_layer_height())
+        curves = rs.AddSrfContourCrvs(shape, plane)
+
         if not wall_mode or (wall_mode and fill_bottom and l+1>bottom_layers):
-            travel_paths = travel_paths + fill_layer_with_fermat_spiral(t, shape, l*t.get_layer_height(), start_pnt=t.get_position(), wall_mode=wall_mode, walls=walls)
+            travel_paths = travel_paths + fill_curves_with_fermat_spiral(t, curves, start_pnt=t.get_position(), wall_mode=wall_mode, walls=walls)
         else:
-            travel_paths = travel_paths + fill_layer_with_fermat_spiral(t, shape, l*t.get_layer_height(), start_pnt=t.get_position())
+            travel_paths = travel_paths + fill_curves_with_fermat_spiral(t, curves, start_pnt=t.get_position())
  
     return travel_paths
 
@@ -730,7 +861,7 @@ def fill_layer_with_spiral(t, shape, z, start_pnt=None):
             if node['type'] == 1:
                 start_idx = None
                 if start_pnt:
-                    start_idx = closest_point(start_pnt, rs.DivideCurve(node['curves'][0], num_pnts))
+                    start_idx, d = closest_point(start_pnt, rs.DivideCurve(node['curves'][0], num_pnts))
                 spiral, indices = spiral_contours(t, node["curves"], start_idx)
                 t.pen_up()
                 travel_paths.append(rs.AddCurve([t.get_position(), spiral[0]]))
@@ -795,7 +926,7 @@ def fill_layer_with_contours(t, shape, z):
                 t.set_position(p.X, p.Y, p.Z)
 
         if i<len(isocontours)-1:
-            start_idx = closest_point(start, isocontours[i+1])
+            start_idx, d = closest_point(start, isocontours[i+1])
 
     return travel_paths
 

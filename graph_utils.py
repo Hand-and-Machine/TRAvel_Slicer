@@ -7,8 +7,15 @@ class Graph:
         self.count = 0
         self.count_limit = 1000
 
+        self.path = None
+        self.path_found = False
+
         self.path_check = None
         self.min_weight = 1000000
+
+    def print_graph_data(self):
+        print([node.name for node in self.nodes])
+        print([str(start.name)+' --'+str(int(self.edges[start][end]))+'--> '+str(end.name) for start in self.edges for end in self.edges[start]])
 
     def add_node(self, node):
         if node in self.nodes:
@@ -32,8 +39,6 @@ class Graph:
             if node.data == data: return node
 
     def get_shortest_hamiltonian_path(self):
-        #print([node.data.data for node in self.nodes])
-        #print([str(start.data.data)+' --'+str(int(self.edges[start][end]))+'--> '+str(end.data.data) for start in self.edges for end in self.edges[start]])
         self.count = 0
         paths = self.get_all_hamiltonian_paths(True)
         if len(paths) == 0:
@@ -75,10 +80,33 @@ class Graph:
 
         return paths
 
+    def check_for_path(self, start, end):
+        self.count = 0
+        self.path = None
+        self.path_found = False
+        self.get_path_to(end, [start])
+        return self.path_found, self.path
+
+    def get_path_to(self, end, path):
+        if not self.path_found:
+            self.count = self.count + 1
+            if self.count > self.count_limit:
+                raise ValueError("Exceeded search limit")
+
+            for node in self.edges[path[-1]].keys():
+                if node not in path:
+                    if node == end:
+                        self.path_found = True
+                        self.path = path + [node]
+                        return
+                    else:
+                        self.get_path_to(end, path + [node])
+
 
 class Graph_Node:
     def __init__(self, data):
         self.data = data
+        self.name = None
 
 
 class Graph_Edge:

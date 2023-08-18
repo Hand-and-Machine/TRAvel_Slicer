@@ -24,22 +24,22 @@ def test_graph():
     test.add_node(b)
     test.add_node(c)
     test.add_node(d)
-    test.add_edge(Graph_Edge(a, b, 3))
-    test.add_edge(Graph_Edge(a, d, 5))
-    test.add_edge(Graph_Edge(a, c, 3))
-    test.add_edge(Graph_Edge(b, a, 1))
-    test.add_edge(Graph_Edge(b, c, 2))
-    test.add_edge(Graph_Edge(b, d, 1))
-    test.add_edge(Graph_Edge(c, a, 1))
-    test.add_edge(Graph_Edge(c, b, 3))
-    test.add_edge(Graph_Edge(c, d, 2))
-    test.add_edge(Graph_Edge(d, a, 5))
-    test.add_edge(Graph_Edge(d, b, 4))
-    test.add_edge(Graph_Edge(d, c, 0))
 
-    test.starts.append(a)
-    path = test.get_shortest_hamiltonian_path()
-    print([node.data for node in path[0]], path[1])
+    test.add_edge(Graph_Edge(a, b, 3))
+    test.add_edge(Graph_Edge(b, a, 3))
+
+    test.add_edge(Graph_Edge(a, c, 5))
+    test.add_edge(Graph_Edge(c, a, 5))
+    
+    test.add_edge(Graph_Edge(b, c, 4))
+    test.add_edge(Graph_Edge(c, b, 4))
+
+    test.add_edge(Graph_Edge(c, d, 2))
+    test.add_edge(Graph_Edge(d, c, 2))
+
+    path_found, path = test.check_for_path(a, d)
+    print(path_found)
+    if path: print([node.data for node in path])
 
 
 def best_vertical_path(t, shape):
@@ -102,26 +102,28 @@ def build_vertical_tree(t, shape):
         plane = get_plane(z)
         curves = rs.AddSrfContourCrvs(shape, plane)
 
+        curve_groups = get_curve_groupings(curves)
+
         center_point = rs.CreatePoint(0, 0, z)
-        for curve in curves:
-            center_point = rs.PointAdd(center_point, rs.CurveAreaCentroid(curve)[0])
-        center_point = rs.CreatePoint(center_point.X/len(curves), center_point.X/len(curves), center_point.Z/len(curves))
+        for curves in curve_groups:
+            center_point = rs.PointAdd(center_point, rs.CurveAreaCentroid(curves[0])[0])
+        center_point = rs.CreatePoint(center_point.X/len(curve_groups), center_point.X/len(curve_groups), center_point.Z/len(curve_groups))
         center_points.append(center_point)
 
         new_nodes = []
-        for curve in curves:
-            node = Node(curve)
+        for curves in curve_groups:
+            node = Node(curves)
             node.depth = l
             node.height = l
-            pnts = rs.DivideCurve(curve, 100)
-            node.start_point = pnts[closest_point(center_point, pnts)]
+            pnts = rs.DivideCurve(curves[0], 100)
+            node.start_point = pnts[closest_point(center_point, pnts)[0]]
             new_nodes.append(node)
             if root in previous_nodes:
                 node.parents.append(root)
                 root.children.append(node)
             else:
                 for prev_n in previous_nodes:
-                    if xy_bbox_overlap(prev_n.data, curve):
+                    if xy_bbox_overlap(prev_n.data, curves[0]):
                         node.parents.append(prev_n)
                         prev_n.children.append(node)
             if len(node.parents) == 0: node.needs_support = True
@@ -206,8 +208,6 @@ def subdivide_by_overlap(nodes, width):
 
             # if node2 within height chunk is a sibling or cousin
             if node1 != node2 and node2 not in other_nodes:
-                #print('')
-                #print(node1.data, node2.data)
                 in_an_above = False
                 in_a_below = False
                 prev_above = False
@@ -223,14 +223,8 @@ def subdivide_by_overlap(nodes, width):
                             if s1.height < s2.height:
                                 below = True
 
-                    #print('')
-                    #print(s1.height)
-                    #print("above", above)
-                    #print("below", below)
-
                     if above != prev_above or below != prev_below:
                         if (in_a_below and in_an_above) or (above and in_a_below) or (below and in_an_above):
-                            #print('SPLIT')
                             splits[node1].append(s1.height-1)
 
                         if above or below or (in_a_below and in_an_above):

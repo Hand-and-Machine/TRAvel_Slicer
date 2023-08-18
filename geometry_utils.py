@@ -54,4 +54,108 @@ def closest_point(point, points):
             closest['distance'] = dist
             closest['point'] = p
     
-    return closest['point']
+    return closest['point'], closest['distance']
+
+def get_curve_groupings(curves):
+    # find curve groupings from intersection of shape with plane
+    # curves can represent the inside of a surface or potentially
+    # a nested curve within another set of curves defining a surface
+    all_points = [rs.DivideCurve(curve, 100) for curve in curves]
+    inside = {c:{c2:all([rs.PointInPlanarClosedCurve(p, curves[c2]) for p in all_points[c]]) for c2 in range(len(curves)) if c2 != c} for c in range(len(curves))}
+    outer_curves = [c for c in range(len(curves)) if not any([inside[c][k] for k in inside[c]])]
+    inner_curves = [c for c in range(len(curves)) if c not in outer_curves]
+
+    iteration = 0
+    curve_groupings = {c:[] for c in outer_curves}
+    while len(inner_curves) > 0:
+        if iteration > 30: break
+        iteration = iteration+1
+        next_group = []
+        for c in outer_curves:
+            for c2 in inner_curves:
+                if inside[c2][c] and all([inside[c2][c3] == inside[c][c3] for c3 in inside[c2] if c3 != c]):
+                    curve_groupings[c].append(c2)
+                    next_group.append(c2)
+                    inner_curves.remove(c2)
+
+        outer_curves = []
+        for c in next_group:
+            for c2 in inner_curves:
+                if inside[c2][c] and all([inside[c2][c3] == inside[c][c3] for c3 in inside[c2] if c3 != c]):
+                    outer_curves.append(c2)
+                    curve_groupings[c2] = []
+                    inner_curves.remove(c2)
+
+    groups = [[c]+curve_groupings[c] for c in curve_groupings]
+    curves = [[curves[c] for c in g] for g in groups]
+    return curves
+
+def split_curve_at(curve, points, tolerance=0):
+    curves = [curve]
+    split_ends = []
+
+    for point in points:
+        for crv in curves:
+            if closest_point(point, rs.DivideCurve(crv, int(rs.CurveLength(curve)/(tolerance/10))))[1] < tolerance:
+                curves.remove(crv)
+                split_curves, split_ends = split_curve(crv, point, tolerance)
+                curves = curves + split_curves
+                break
+    
+    return curves, split_ends
+
+
+def split_curve(curve, split_point, tolerance):
+    points = rs.DivideCurve(curve, int(rs.CurveLength(curve)/(tolerance/10)))
+
+    # find closest point first
+    closest_idx, dist = closest_point(split_point, points)
+
+    # collect all points on curve that are a distance of <= tolerance/2
+    # from the point closest to the split point, then verify that the
+    # length of the curve between those two indices
+    new_points = [None]*len(points)
+    remove_idxs = []
+    #print('closest', closest_idx)
+    #print('number of points', len(points))
+    for p in range(len(points)):
+        new_points[p] = points[p]
+        if p == closest_idx:
+            remove_idxs.append(p)
+            new_points[p] = None
+        elif p!=closest_idx and rs.Distance(points[p], points[closest_idx]) < tolerance/2:
+            indices1 = []
+            indices2 = []
+            if p > closest_idx:
+                indices1 = range(p, len(points)) + range(0, closest_idx+1)
+                indices2 = range(closest_idx, p-1, -1)
+            elif p < closest_idx:
+                indices1 = range(p, closest_idx+1)
+                indices2 = range(p, 0, -1) + range(len(points)-1, closest_idx-1, -1)
+
+            points1 = [points[x] for x in indices1]
+            points2 = [points[x] for x in indices2]
+
+            curve_length_1 = 0
+            if len(points1) > 0: curve_length_1 = rs.CurveLength(rs.AddCurve(points1))
+            curve_length_2 = 0
+            if len(points2) > 0: curve_length_2 = rs.CurveLength(rs.AddCurve(points2))
+
+            if curve_length_1 < tolerance / 2 or curve_length_2 < tolerance / 2:
+                remove_idxs.append(p)
+                new_points[p] = None
+
+    sequences = [[]]
+    start_index = 0
+    if rs.IsCurveClosed(curve):
+        start_index = next((index for index, value in enumerate(new_points) if value != None and new_points[index-1] == None), -1)
+    if start_index !=- 1:
+        indices = range(start_index, len(new_points)) + range(0, start_index)
+        for i in indices:
+            next_i = (i+1)%len(new_points)
+            if new_points[i] != None:
+                sequences[-1].append(i)
+            elif new_points[next_i] != None and next_i != start_index:
+                sequences.append([])
+
+    return [rs.AddCurve([points[p] for p in sequence]) for sequence in sequences if len(sequence) > 1], [points[sequence[0]] for sequence in sequences] + [points[sequence[-1]] for sequence in sequences]
