@@ -1,4 +1,5 @@
 import math
+import time
 import Rhino
 import rhinoscriptsyntax as rs
 import extruder_turtle  
@@ -10,6 +11,18 @@ from geometry_utils import *
 
 import graph_utils
 from graph_utils import *
+
+def get_num_points(t, curve):
+    offset = t.get_extrude_width()
+    return int(rs.CurveLength(curve)/(offset/4))
+
+
+def get_max_depth(t, curve):
+    num_pnts = get_num_points(t, curve)
+    points = rs.DivideCurve(curve, num_pnts)
+    #
+
+
 
 def get_corner(t, outer_curve, inner_curve, points):
     offset = t.get_extrude_width()
@@ -46,6 +59,7 @@ def get_corner(t, outer_curve, inner_curve, points):
 
 
 def get_isocontours(t, curve, parent, wall_mode=False, walls=3):
+    #max_depth = get_max_depth(t, curve)
     new_curves = get_isocontour(t, curve)
     if not new_curves:
         return []
@@ -74,7 +88,9 @@ def get_isocontour(t, curve):
             print("Error: get_isocontours called with an unclosable curve: ", curve)
             return None
 
-    num_pnts = int(rs.CurveLength(curve)/(offset/4))
+    num_pnts = get_num_points(t, curve)
+
+    print('Number of points for curve of length '+str(rs.CurveLength(curve))+': '+str(num_pnts))
 
     if num_pnts <= 5:
         print("Error: precision too low or curve too small")
@@ -228,7 +244,7 @@ def spiral_contours(t, isocontours, start_index):
     # connect each isocontour with the one succeeding it
     spiral = []
     offset = t.get_extrude_width()
-    num_pnts = int(rs.CurveLength(isocontours[0])/(offset/4))
+    num_pnts = get_num_points(t, isocontours[0])
     points = rs.DivideCurve(isocontours[0], num_pnts)
 
     # choose appropriate starting index on outermost contour
@@ -272,8 +288,7 @@ def spiral_contours(t, isocontours, start_index):
         # find closest point in next contour to the break point
         # if we are not at the centermost contour
         if i < len(isocontours) - 1:
-            num_pnts = int(rs.CurveLength(isocontours[i+1])/(offset/4))
-            next_points = rs.DivideCurve(isocontours[i+1], num_pnts)
+            next_points = rs.DivideCurve(isocontours[i+1], get_num_points(t, isocontours[i+1]))
             closest = {"point": None, "distance": 1000000}
             for j in range(len(next_points)):
                 dist = rs.Distance(break_point, next_points[j])
@@ -770,7 +785,6 @@ def fill_curves_with_fermat_spiral(t, curves, start_pnt=None, wall_mode=False, w
 
     # slice the shape
     print("Generating Isocontours")
-
     root = {"guid": curve, "depth": 0, "children":[]}
     isocontours = [] + [curve]
     new_curves = get_isocontours(t, curve, root, wall_mode, walls)
@@ -786,13 +800,10 @@ def fill_curves_with_fermat_spiral(t, curves, start_pnt=None, wall_mode=False, w
     print("Spiralling Regions")
     for n in all_nodes:
         if len(n.get('curves')) > 0:
-            num_pnts = int(rs.CurveLength(n['curves'][0])/(t.get_extrude_width()/10))
-            print("number of points", num_pnts)
+            num_pnts = get_num_points(t, n['curves'][0])
             if n['type'] == 1:
                 start_idx = None
                 if start_pnt:
-                    print(n['curves'][0])
-                    print(start_pnt)
                     start_idx, d = closest_point(start_pnt, rs.DivideCurve(n['curves'][0], num_pnts))
                 spiral, indices = spiral_contours(t, n["curves"], start_idx)
                 n["fermat_spiral"] = fermat_spiral(t, spiral, indices)
@@ -813,40 +824,19 @@ def fill_curves_with_fermat_spiral(t, curves, start_pnt=None, wall_mode=False, w
     return travel_paths
 
 
-def slice_fermat_fill(t, shape, wall_mode=False, walls=3, fill_bottom=False, bottom_layers=3):
-    travel_paths = []
-    layers = int(math.floor(get_shape_height(shape) / t.get_layer_height())) + 1
-    for l in range(layers):
-        print("Slicing Layer "+str(l))
-        plane = get_plane(l*t.get_layer_height())
-        curves = rs.AddSrfContourCrvs(shape, plane)
-
-        if not wall_mode or (wall_mode and fill_bottom and l+1>bottom_layers):
-            travel_paths = travel_paths + fill_curves_with_fermat_spiral(t, curves, start_pnt=t.get_position(), wall_mode=wall_mode, walls=walls)
-        else:
-            travel_paths = travel_paths + fill_curves_with_fermat_spiral(t, curves, start_pnt=t.get_position())
- 
-    return travel_paths
-
-
-def fill_layer_with_spiral(t, shape, z, start_pnt=None):
-    # get outer curves of shape
-    plane = get_plane(z)
-
-    # if there is more than one curve when intersecting
-    # with the plane, we will have travel paths between them
-    curves = rs.AddSrfContourCrvs(shape, plane)
+def fill_curves_with_spiral(t, curves, start_pnt=None):
+    # connect curves if given more than one
+    curve = curves[0]
+    if len(curves) > 1:
+        curve = connect_curves(t, curves)
 
     # slice the shape
     print("Generating Isocontours")
-    root = {"guid": "root", "depth": 0, "children":[]}
-    isocontours = [] + curves
-    for curve in curves:
-        node = {"guid": curve, "depth": root["depth"]+1, "parent": root, "children":[]}
-        root["children"].append(node)
-        new_curves = get_isocontours(t, curve, node)
-        if new_curves:
-            isocontours = isocontours + new_curves
+    root = {"guid": curve, "depth": 0, "children":[]}
+    isocontours = [] + [curve]
+    new_curves = get_isocontours(t, curve, root)
+    if new_curves:
+        isocontours = isocontours + new_curves
 
     region_tree = segment_tree(root)
     set_node_types(region_tree)
@@ -857,7 +847,7 @@ def fill_layer_with_spiral(t, shape, z, start_pnt=None):
     for node in all_nodes:
         if 'root' in node['curves']: node['curves'].remove('root')
         if len(node['curves']) > 0:
-            num_pnts = int(rs.CurveLength(n['curves'][0])/(t.get_extrude_width()/10))
+            num_pnts = get_num_points(t, node['curves'][0])
             if node['type'] == 1:
                 start_idx = None
                 if start_pnt:
@@ -881,36 +871,36 @@ def fill_layer_with_spiral(t, shape, z, start_pnt=None):
     return travel_paths
 
 
-def slice_spiral_fill(t, shape):
-    travel_paths = []
-    layers = int(math.floor(get_shape_height(shape) / t.get_layer_height())) + 1
-    for l in range(layers):
-        print("Slicing Layer "+str(l))
-        travel_paths = travel_paths + fill_layer_with_spiral(t, shape, l*t.get_layer_height(), t.get_position())
+def fill_curves_with_contours(t, curves):
+    overall_time = time.time()
 
-    return travel_paths
+    # connect curves if given more than one
+    curve = curves[0]
+    if len(curves) > 1:
+        start_time = time.time()
 
+        curve = connect_curves(t, curves)
 
-def fill_layer_with_contours(t, shape, z):
-    # get outer curves of shape
-    plane = get_plane(z)
-    
-    # if there is more than one curve when intersecting
-    # with the plane, we will have travel paths between them
-    curves = rs.AddSrfContourCrvs(shape, plane)
+        print("Connecting Curves: "+str(time.time()-start_time)+" seconds")
 
     # slice the shape
-    print("Generating Isocontours")
-    root = {"guid": "root", "depth": 0, "children":[]}
-    isocontours = [] + curves
-    for curve in curves:
-        node = {"guid": curve, "depth": root["depth"]+1, "parent": root, "children":[]}
-        root["children"].append(node)
-        new_curves = get_isocontours(t, curve, node)
-        if new_curves:
-            isocontours = isocontours + new_curves
+    start_time = time.time()
 
-    isocontours = [rs.DivideCurve(i, int(rs.CurveLength(i)/(t.get_extrude_width()/10))) for i in isocontours]
+    root = {"guid": curve, "depth": 0, "children":[]}
+    isocontours = [] + [curve]
+    new_curves = get_isocontours(t, curve, root)
+    if new_curves:
+        isocontours = isocontours + new_curves
+
+    print("Generating Isocontours: "+str(time.time()-start_time)+" seconds")
+
+    start_time = time.time()
+
+    isocontours = [rs.DivideCurve(i, get_num_points(t, i)) for i in isocontours]
+
+    print("Dividing All Isocontours: "+str(time.time()-start_time)+" seconds")
+
+    start_time = time.time()
 
     travel_paths = []
     start_idx = 0
@@ -928,14 +918,70 @@ def fill_layer_with_contours(t, shape, z):
         if i<len(isocontours)-1:
             start_idx, d = closest_point(start, isocontours[i+1])
 
+    print("Drawing Contours: "+str(time.time()-start_time)+" seconds")
+    
+    print("Curve Time: "+str(time.time()-overall_time)+" seconds")
+
     return travel_paths
 
 
-def slice_contour_fill(t, shape):
+def slice_fermat_fill(t, shape, start=0, end=100000000, wall_mode=False, walls=3, fill_bottom=False, bottom_layers=3):
     travel_paths = []
     layers = int(math.floor(get_shape_height(shape) / t.get_layer_height())) + 1
-    for l in range(layers):
+
+    for l in range(start, min(layers, end+1)):
         print("Slicing Layer "+str(l))
-        travel_paths = travel_paths + fill_layer_with_contours(t, shape, l*t.get_layer_height())
+        plane = get_plane(l*t.get_layer_height())
+        curves = rs.AddSrfContourCrvs(shape, plane)
+
+        curve_groups = get_curve_groupings(curves)
+
+        for crvs in curve_groups:
+            if not wall_mode or (wall_mode and fill_bottom and l+1>bottom_layers):
+                travel_paths = travel_paths + fill_curves_with_fermat_spiral(t, crvs, start_pnt=t.get_position(), wall_mode=wall_mode, walls=walls)
+            else:
+                travel_paths = travel_paths + fill_curves_with_fermat_spiral(t, crvs, start_pnt=t.get_position())
+ 
+    return travel_paths
+
+
+def slice_spiral_fill(t, shape, start=0, end=100000000):
+    travel_paths = []
+    layers = int(math.floor(get_shape_height(shape) / t.get_layer_height())) + 1
+    for l in range(start, min(layers, end+1)):
+        print("Slicing Layer "+str(l))
+        plane = get_plane(l*t.get_layer_height())
+        curves = rs.AddSrfContourCrvs(shape, plane)
+
+        curve_groups = get_curve_groupings(curves)
+
+        for crvs in curve_groups:
+            travel_paths = travel_paths + fill_curves_with_spiral(t, crvs, start_pnt=t.get_position())
+
+    return travel_paths
+
+
+def slice_contour_fill(t, shape, start=0, end=100000000):
+    overall_t = time.time()
+
+    travel_paths = []
+    layers = int(math.floor(get_shape_height(shape) / t.get_layer_height())) + 1
+    for l in range(start, min(layers, end)):
+        print("Slicing Layer "+str(l))
+
+        start_t = time.time()
+
+        plane = get_plane(l*t.get_layer_height())
+        curves = rs.AddSrfContourCrvs(shape, plane)
+
+        curve_groups = get_curve_groupings(curves)
+
+        for crvs in curve_groups:
+            travel_paths = travel_paths + fill_curves_with_contours(t, crvs)
+
+        print("Layer Time: "+str(time.time()-start_t)+" seconds")
+        print('')
+
+    print("Overall Time Slicing "+str(len(range(start, min(layers, end))))+": "+str(time.time()-overall_t)+" seconds")
 
     return travel_paths
