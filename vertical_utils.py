@@ -1,4 +1,5 @@
 import math
+import time
 import Rhino
 import rhinoscriptsyntax as rs
 import extruder_turtle  
@@ -101,22 +102,24 @@ def build_vertical_tree(t, shape):
         z = l*t.get_layer_height()
         plane = get_plane(z)
         curves = rs.AddSrfContourCrvs(shape, plane)
-        outer_curve = sorted(curves, key=lambda x: rs.Area(x), reverse=True)[0]
 
         curve_groups = get_curve_groupings(curves)
 
-        center_point = rs.CreatePoint(0, 0, z)
-        for curves in curve_groups:
+        center_point = rs.CreatePoint(0, 0, 0)
+        outer_curves = []
+        for crvs in curve_groups:
+            outer_curve = sorted(crvs, key=lambda x: rs.Area(x), reverse=True)[0]
             center_point = rs.PointAdd(center_point, rs.CurveAreaCentroid(outer_curve)[0])
+            outer_curves.append(outer_curve)
         center_point = rs.CreatePoint(center_point.X/len(curve_groups), center_point.X/len(curve_groups), center_point.Z/len(curve_groups))
         center_points.append(center_point)
 
         new_nodes = []
-        for curves in curve_groups:
-            node = Node(curves)
+        for c in range(len(curve_groups)):
+            node = Node(curve_groups[c])
             node.depth = l
             node.height = l
-            pnts = rs.DivideCurve(outer_curve, 100)
+            pnts = rs.DivideCurve(outer_curves[c], 100)
             node.start_point = pnts[closest_point(center_point, pnts)[0]]
             new_nodes.append(node)
             if root in previous_nodes:
@@ -124,7 +127,7 @@ def build_vertical_tree(t, shape):
                 root.children.append(node)
             else:
                 for prev_n in previous_nodes:
-                    if xy_bbox_overlap(prev_n.data, outer_curve):
+                    if xy_bbox_overlap(prev_n.data, outer_curves[c]):
                         node.parents.append(prev_n)
                         prev_n.children.append(node)
             if len(node.parents) == 0: node.needs_support = True

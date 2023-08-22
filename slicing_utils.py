@@ -9,6 +9,9 @@ from extruder_turtle import *
 import geometry_utils
 from geometry_utils import *
 
+#import vertical_utils
+#from vertical_utils import *
+
 import graph_utils
 from graph_utils import *
 
@@ -22,6 +25,30 @@ def get_max_depth(t, curve):
     points = rs.DivideCurve(curve, num_pnts)
     #
 
+
+def get_winding_order(t, curve, points):
+    # get winding order, CW or CCW
+    offset = t.get_extrude_width()
+    winding_order = None
+
+    for i in range(4):
+        index = i*(len(points)/4)
+
+        tangent = rs.VectorSubtract(points[index+1], points[index-1])
+        pnt_cw = rs.VectorAdd(points[index], rs.VectorScale(rs.VectorUnitize(rs.VectorRotate(tangent, -90, [0, 0, 1])), offset/10))
+        pnt_ccw = rs.VectorAdd(points[index], rs.VectorScale(rs.VectorUnitize(rs.VectorRotate(tangent, 90, [0, 0, 1])), offset/10))
+
+        direction = None
+        if rs.PointInPlanarClosedCurve(pnt_cw, curve):
+            winding_order = "CW"
+            direction = -90
+            break
+        elif rs.PointInPlanarClosedCurve(pnt_ccw, curve):
+            winding_order = "CCW"
+            direction = 90
+            break
+
+    return winding_order, direction
 
 
 def get_corner(t, outer_curve, inner_curve, points):
@@ -90,8 +117,6 @@ def get_isocontour(t, curve):
 
     num_pnts = get_num_points(t, curve)
 
-    print('Number of points for curve of length '+str(rs.CurveLength(curve))+': '+str(num_pnts))
-
     if num_pnts <= 5:
         print("Error: precision too low or curve too small")
         return None
@@ -121,7 +146,9 @@ def get_isocontour(t, curve):
 
         # check that distance from all points is >= offset
         include = True
-        for j in range(len(points)):
+
+        idx_range = range(max(i-10, 0), len(points), 3) + range(0, max(i-10, 0), 3)
+        for j in idx_range:
             if not i == j and rs.Distance(points[j], new_point) < offset:
                 include = False
                 break
@@ -209,31 +236,6 @@ def get_isocontour(t, curve):
             return [rs.AddCurve(new_points + [new_points[0]])] #, new_points, discarded_points
     else:
         return None
-
-
-def get_winding_order(t, curve, points):
-    # get winding order, CW or CCW
-    offset = t.get_extrude_width()
-    winding_order = None
-
-    for i in range(4):
-        index = i*(len(points)/4)
-
-        tangent = rs.VectorSubtract(points[index+1], points[index-1])
-        pnt_cw = rs.VectorAdd(points[index], rs.VectorScale(rs.VectorUnitize(rs.VectorRotate(tangent, -90, [0, 0, 1])), offset/10))
-        pnt_ccw = rs.VectorAdd(points[index], rs.VectorScale(rs.VectorUnitize(rs.VectorRotate(tangent, 90, [0, 0, 1])), offset/10))
-
-        direction = None
-        if rs.PointInPlanarClosedCurve(pnt_cw, curve):
-            winding_order = "CW"
-            direction = -90
-            break
-        elif rs.PointInPlanarClosedCurve(pnt_ccw, curve):
-            winding_order = "CCW"
-            direction = 90
-            break
-
-    return winding_order, direction
 
 
 def spiral_contours(t, isocontours, start_index):
@@ -914,6 +916,7 @@ def fill_curves_with_contours(t, curves):
         points = [isocontours[i][idx] for idx in range(start_idx, len(isocontours[i])) + range(0, start_idx)]
         for p in points:
                 t.set_position(p.X, p.Y, p.Z)
+        t.set_position(start.X, start.Y, start.Z)
 
         if i<len(isocontours)-1:
             start_idx, d = closest_point(start, isocontours[i+1])
@@ -925,9 +928,11 @@ def fill_curves_with_contours(t, curves):
     return travel_paths
 
 
-def slice_fermat_fill(t, shape, start=0, end=100000000, wall_mode=False, walls=3, fill_bottom=False, bottom_layers=3):
+def slice_fermat_fill(t, shape, start=0, end=None, wall_mode=False, walls=3, fill_bottom=False, bottom_layers=3):
     travel_paths = []
     layers = int(math.floor(get_shape_height(shape) / t.get_layer_height())) + 1
+
+    if end is None: end = layers
 
     for l in range(start, min(layers, end+1)):
         print("Slicing Layer "+str(l))
@@ -945,9 +950,12 @@ def slice_fermat_fill(t, shape, start=0, end=100000000, wall_mode=False, walls=3
     return travel_paths
 
 
-def slice_spiral_fill(t, shape, start=0, end=100000000):
+def slice_spiral_fill(t, shape, start=0, end=None):
     travel_paths = []
     layers = int(math.floor(get_shape_height(shape) / t.get_layer_height())) + 1
+
+    if end is None: end = layers
+
     for l in range(start, min(layers, end+1)):
         print("Slicing Layer "+str(l))
         plane = get_plane(l*t.get_layer_height())
@@ -961,11 +969,14 @@ def slice_spiral_fill(t, shape, start=0, end=100000000):
     return travel_paths
 
 
-def slice_contour_fill(t, shape, start=0, end=100000000):
+def slice_contour_fill(t, shape, start=0, end=None):
     overall_t = time.time()
 
     travel_paths = []
     layers = int(math.floor(get_shape_height(shape) / t.get_layer_height())) + 1
+
+    if end is None: end = layers
+
     for l in range(start, min(layers, end)):
         print("Slicing Layer "+str(l))
 
@@ -982,6 +993,19 @@ def slice_contour_fill(t, shape, start=0, end=100000000):
         print("Layer Time: "+str(time.time()-start_t)+" seconds")
         print('')
 
-    print("Overall Time Slicing "+str(len(range(start, min(layers, end))))+": "+str(time.time()-overall_t)+" seconds")
+    print("Overall Time Slicing "+str(len(range(start, min(layers, end))))+" Layers: "+str(time.time()-overall_t)+" seconds")
 
     return travel_paths
+
+
+#def slice_vertical_and_fermat_fill(t, shape, wall_mode=False, walls=3, fill_bottom=False, bottom_layers=3):
+#    travel_paths = []
+#
+#    tree, path, center_points = best_vertical_path(t, shape)
+#
+#    #for sup_node in path:
+#        #for node in sup_node.sub_nodes:
+#            #travel_paths = travel_paths + fill_curves_with_fermat_spiral(t, node.data, start_pnt=node.start_point)
+#    
+#    #return travel_paths, center_points
+#    return path, center_points
