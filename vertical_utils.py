@@ -111,7 +111,7 @@ def build_vertical_tree(t, shape):
             outer_curve = sorted(crvs, key=lambda x: rs.Area(x), reverse=True)[0]
             center_point = rs.PointAdd(center_point, rs.CurveAreaCentroid(outer_curve)[0])
             outer_curves.append(outer_curve)
-        center_point = rs.CreatePoint(center_point.X/len(curve_groups), center_point.X/len(curve_groups), center_point.Z/len(curve_groups))
+        center_point = rs.CreatePoint(center_point.X/len(curve_groups), center_point.Y/len(curve_groups), center_point.Z/len(curve_groups))
         center_points.append(center_point)
 
         new_nodes = []
