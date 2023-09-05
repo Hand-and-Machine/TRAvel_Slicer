@@ -59,6 +59,7 @@ def best_vertical_path(t, shape):
         # add nodes to graph for every super node within the height chunk
         for node in nodes_at_height:
             graph_node = Graph_Node(node)
+            graph_node.name = node.name
             height_graph.add_node(graph_node)
             # add start nodes to the graph
             if node.sub_nodes[0].height % nozzle_height == 0:
@@ -86,14 +87,18 @@ def best_vertical_path(t, shape):
         for n in height_graph.edges:
             num_edges = num_edges + len(height_graph.edges[n].keys())
         print(len(height_graph.nodes), num_edges)
+        #height_graph.print_graph_data()
         height_graph.path_check = check_path
+
+        #return vert_tree, path, center_points
+
         path = path + height_graph.get_shortest_hamiltonian_path()[0]
 
     return vert_tree, path, center_points
 
 
 def build_vertical_tree(t, shape):
-    layers = int(math.floor(get_shape_height(shape) / t.get_layer_height())) + 1
+    layers = int(math.floor(get_shape_height(shape) / t.get_layer_height()))
     root = Node('root')
 
     center_points = []
@@ -143,6 +148,7 @@ def segment_tree_by_height(t, tree, total_height):
     nozzle_height = 30 #height of nozzle in mm
     limit = int(math.floor(nozzle_height / t.get_layer_height()))
     super_root = Node('root')
+    super_root.name = 'root'
     super_root.depth = 0
     super_root.height = 0
     idx = 0
@@ -160,6 +166,7 @@ def group_by_height(node, super_node, height, idx=0):
         super_node.sub_nodes.append(node)
     elif node.depth // height > super_node.height:
         new_super = Node(str(super_node.data)+'_'+str(idx))
+        new_super.name = new_super.data
         new_super.parents = [super_node]
         new_super.depth = super_node.depth + 1
         new_super.height = node.depth // height
@@ -175,6 +182,7 @@ def group_by_height(node, super_node, height, idx=0):
     if len(node.children) > 1:
         for child in node.children:
             new_new_super = Node(str(s_node.data)+'_'+str(idx))
+            new_new_super.name = new_new_super.data
             new_new_super.parents = [s_node]
             new_new_super.depth = s_node.depth + 1
             new_new_super.height = node.depth // height
@@ -200,22 +208,59 @@ def divide_by_overlap(super_root, total_height):
 
 
 def subdivide_by_overlap(nodes, width):
-    splits = {}
+    # create a DFA (all DFAs are NFAs) with:
+    # States = Above (A), Below (B), Neither (N),
+    # Both (X), starting state (S) (also split state)
+    # Final States = { S }
+    # Alphabet = { a, b, n, x } (above, below, neither, both)
+    # Transitions:
+    # d(S, a) = A, d(S, b) = B, d(S, n) = N, d(S, x) = X
+    # d(A, a) = A, d(A, n) = A, d(A, b) = S, d(A, x) = S
+    # d(B, b) = B, d(B, n) = B, d(B, a) = S, d(B, x) = S
+    # d(X, x) = X, d(X, n) = X, d(X, a) = S, d(X, b) = S
+    # d(N, n) = N, d(N, a) = A, d(N, b) = B, d(N, x) = S
+    dfa = NFA()
+    S = Graph_Node('S')
+    A = Graph_Node('A')
+    B = Graph_Node('B')
+    N = Graph_Node('N')
+    X = Graph_Node('X')
+
+    dfa.add_node(S)
+    dfa.add_node(A)
+    dfa.add_node(B)
+    dfa.add_node(N)
+    dfa.add_node(X)
+
+    dfa.set_start(S)
+    dfa.set_final(S)
+
+    dfa.add_to_alphabet('a')
+    dfa.add_to_alphabet('b')
+    dfa.add_to_alphabet('n')
+    dfa.add_to_alphabet('x')
+
+    dfa.transitions[S] = {'a': A, 'b': B, 'n': N, 'x': X}
+    dfa.transitions[A] = {'a': A, 'b': S, 'n': A, 'x': S}
+    dfa.transitions[B] = {'a': S, 'b': B, 'n': B, 'x': S}
+    dfa.transitions[N] = {'a': A, 'b': B, 'n': N, 'x': S}
+    dfa.transitions[X] = {'a': S, 'b': S, 'n': X, 'x': X}
+
+    splits = {node:[] for node in nodes}
     for n1 in range(len(nodes)):
+        print('')
         # check each sub-layer within the node to see if it overlaps with other
         # nodes' layers, if those nodes are siblings or cousins of the node
         node1 = nodes[n1]
-        splits[node1] = []
         for n2 in range(len(nodes)):
             node2 = nodes[n2]
             other_nodes = node1.get_all_ancestors([]) + node1.get_all_descendants([])
 
+            current = dfa.start
+
             # if node2 within height chunk is a sibling or cousin
             if node1 != node2 and node2 not in other_nodes:
-                in_an_above = False
-                in_a_below = False
-                prev_above = False
-                prev_below = False
+                elem = ''
 
                 for s1 in node1.sub_nodes:
                     above = False
@@ -227,16 +272,16 @@ def subdivide_by_overlap(nodes, width):
                             if s1.height < s2.height:
                                 below = True
 
-                    if above != prev_above or below != prev_below:
-                        if (in_a_below and in_an_above) or (above and in_a_below) or (below and in_an_above):
-                            splits[node1].append(s1.height-1)
+                    if above and not below: elem = 'a'
+                    if not above and below: elem = 'b'
+                    if above and below: elem = 'n'
+                    if not above and not below: elem = 'x'
 
-                        if above or below or (in_a_below and in_an_above):
-                            in_a_below = below
-                            in_an_above = above
-
-                    prev_above = above
-                    prev_below = below
+                    # transition in the dfa according element value
+                    current = dfa.transition(current, elem)
+                    if current in dfa.final:
+                        splits[node1].append(s1.height-1)
+                        print("Split!", splits)
 
     for node in splits:
         for split in splits[node]:
@@ -244,23 +289,29 @@ def subdivide_by_overlap(nodes, width):
 
 
 def split_super_node_at_height(node, height):
-    split_node = Node(node.data+'_split_'+str(height))
-    split_node.depth = node.depth
-    split_node.height = node.height
-    split_node.children.append(node)
-    split_node.parents = [p for p in node.parents]
-    for p in split_node.parents:
-        p.children.append(split_node)
-        p.children.remove(node)
-    split_node.sub_nodes = [n for n in node.sub_nodes if n.height <= height]
+    subs1 = [n for n in node.sub_nodes if n.height <= height]
+    subs2 = [n for n in node.sub_nodes if n.height > height]
+    print(len(subs1), len(subs2))
+    if len(subs1) > 0 and len(subs2) > 0:
+        split_node = Node(node.data+'_split_'+str(height))
+        split_node.name = split_node.data
+        split_node.depth = node.depth
+        split_node.height = node.height
+        split_node.children.append(node)
+        split_node.parents = [p for p in node.parents]
+        for p in split_node.parents:
+            p.children.append(split_node)
+            p.children.remove(node)
+        split_node.sub_nodes = subs1
 
-    node.depth = node.depth + 1
-    node.parents = [split_node]
-    node.sub_nodes = [n for n in node.sub_nodes if n.height > height]
+        node.depth = node.depth + 1
+        node.parents = [split_node]
+        node.sub_nodes = subs2
 
-    descendants = node.get_all_descendants([])
-    for d in descendants:
-        d.depth = d.depth + 1
+        descendants = node.get_all_descendants([])
+        for d in descendants:
+            print(node.depth, d.depth, d.depth+1)
+            d.depth = d.depth + 1
 
 
 def is_overlapping(node1, node2, width):
@@ -274,5 +325,8 @@ def is_overlapping(node1, node2, width):
 def check_path(next_node, path):
     nozzle_width = 8 #max diameter of the nozzle in mm
     for node in path:
-        if is_overlapping(node.data, next_node.data, nozzle_width): return False
+        if is_overlapping(node.data, next_node.data, nozzle_width):
+            print(str(node.name)+" overlaps "+str(next_node.name))
+            return True
+            #return False
     return True

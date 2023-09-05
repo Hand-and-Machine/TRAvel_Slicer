@@ -114,3 +114,49 @@ class Graph_Edge:
         self.end = end
         self.start = start
         self.weight = weight
+
+class NFA:
+    def __init__(self):
+        self.nodes = []
+        self.start = None
+        self.final = []
+        self.alphabet = []
+        self.transitions = {}
+
+    def add_node(self, node):
+        if node in self.nodes:
+            raise ValueError("Duplicate node")
+        else:
+            self.nodes.append(node)
+            self.transitions[node]={}
+
+    def set_start(self, node):
+        if node in self.nodes:
+            self.start = node
+        else:
+            raise ValueError("Node not in nodes")
+
+    def set_final(self, node):
+        if node in self.nodes:
+            self.final.append(node)
+        else:
+            raise ValueError("Node not in nodes")
+
+    def add_to_alphabet(self, elem):
+        if elem in self.alphabet:
+            raise ValueError("Duplicate element")
+        else:
+            self.alphabet.append(elem)
+
+    def add_transition(self, start, elem, end):
+        if elem not in self.alphabet or start not in self.nodes or end not in self.nodes:
+            raise ValueError("Cannot add transition")
+        else:
+            self.transitions[start][elem] = end
+
+    def transition(self, start, elem):
+        if elem not in self.alphabet or start not in self.nodes:
+            raise ValueError("Illegal transition")
+        else:
+            print(start.data, elem, self.transitions[start][elem])
+            return self.transitions[start][elem]
