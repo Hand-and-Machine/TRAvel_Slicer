@@ -5,7 +5,7 @@ class Graph:
         self.starts = []
 
         self.count = 0
-        self.count_limit = 1000
+        self.count_limit = 5000
 
         self.path = None
         self.path_found = False
@@ -65,7 +65,7 @@ class Graph:
             paths.append(path)
             return paths
 
-        for end in self.edges[path[0][-1]].keys():
+        for end in sorted(self.edges[path[0][-1]].keys(), key=lambda x:self.edges[path[0][-1]][x]):
             weight = path[1]+self.edges[path[0][-1]][end]
             # check that we have not already been to this graph node
             if end not in path[0]:

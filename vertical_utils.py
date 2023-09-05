@@ -48,6 +48,7 @@ def best_vertical_path(t, shape):
     all_nodes = vert_tree.get_all_nodes([])
 
     path = []
+    boundingBoxes = []
     nozzle_width = 8 # maximum width of nozzle
     nozzle_height = 30 # height of nozzle in mm
     height = get_shape_height(shape)
@@ -90,11 +91,13 @@ def best_vertical_path(t, shape):
         #height_graph.print_graph_data()
         height_graph.path_check = check_path
 
-        #return vert_tree, path, center_points
+        boundingBoxes = boundingBoxes + [rs.AddBox(rs.BoundingBox([sub.data for sub in node.data.sub_nodes])) for node in height_graph.nodes]
+
+        #return vert_tree, path, center_points, boundingBoxes
 
         path = path + height_graph.get_shortest_hamiltonian_path()[0]
 
-    return vert_tree, path, center_points
+    return vert_tree, path, center_points, boundingBoxes
 
 
 def build_vertical_tree(t, shape):
@@ -244,11 +247,10 @@ def subdivide_by_overlap(nodes, width):
     dfa.transitions[A] = {'a': A, 'b': S, 'n': A, 'x': S}
     dfa.transitions[B] = {'a': S, 'b': B, 'n': B, 'x': S}
     dfa.transitions[N] = {'a': A, 'b': B, 'n': N, 'x': S}
-    dfa.transitions[X] = {'a': S, 'b': S, 'n': X, 'x': X}
+    dfa.transitions[X] = {'a': S, 'b': S, 'n': S, 'x': X}
 
     splits = {node:[] for node in nodes}
     for n1 in range(len(nodes)):
-        print('')
         # check each sub-layer within the node to see if it overlaps with other
         # nodes' layers, if those nodes are siblings or cousins of the node
         node1 = nodes[n1]
@@ -266,7 +268,7 @@ def subdivide_by_overlap(nodes, width):
                     above = False
                     below = False
                     for s2 in node2.sub_nodes:
-                        if xy_bbox_overlap(s1.data, s2.data, width):
+                        if xy_bbox_overlap(s1.data, s2.data, width+1):
                             if s1.height > s2.height:
                                 above = True
                             if s1.height < s2.height:
@@ -291,7 +293,6 @@ def subdivide_by_overlap(nodes, width):
 def split_super_node_at_height(node, height):
     subs1 = [n for n in node.sub_nodes if n.height <= height]
     subs2 = [n for n in node.sub_nodes if n.height > height]
-    print(len(subs1), len(subs2))
     if len(subs1) > 0 and len(subs2) > 0:
         split_node = Node(node.data+'_split_'+str(height))
         split_node.name = split_node.data
@@ -310,7 +311,7 @@ def split_super_node_at_height(node, height):
 
         descendants = node.get_all_descendants([])
         for d in descendants:
-            print(node.depth, d.depth, d.depth+1)
+            #print(node.depth, d.depth, d.depth+1)
             d.depth = d.depth + 1
 
 
@@ -326,7 +327,5 @@ def check_path(next_node, path):
     nozzle_width = 8 #max diameter of the nozzle in mm
     for node in path:
         if is_overlapping(node.data, next_node.data, nozzle_width):
-            print(str(node.name)+" overlaps "+str(next_node.name))
-            return True
-            #return False
+            return False
     return True
