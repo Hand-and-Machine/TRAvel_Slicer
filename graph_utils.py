@@ -5,7 +5,7 @@ class Graph:
         self.starts = []
 
         self.count = 0
-        self.count_limit = 5000
+        self.count_limit = 1000
 
         self.path = None
         self.path_found = False

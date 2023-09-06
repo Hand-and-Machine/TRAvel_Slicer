@@ -91,6 +91,8 @@ def best_vertical_path(t, shape):
         #height_graph.print_graph_data()
         height_graph.path_check = check_path
 
+        #bbs = [rs.BoundingBox([sub.data for sub in node.data.sub_nodes]) for node in height_graph.nodes]
+
         boundingBoxes = boundingBoxes + [rs.AddBox(rs.BoundingBox([sub.data for sub in node.data.sub_nodes])) for node in height_graph.nodes]
 
         #return vert_tree, path, center_points, boundingBoxes
