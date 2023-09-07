@@ -17,13 +17,7 @@ from graph_utils import *
 
 def get_num_points(t, curve):
     offset = t.get_extrude_width()
-    return int(rs.CurveLength(curve)/(offset/4))
-
-
-def get_max_depth(t, curve):
-    num_pnts = get_num_points(t, curve)
-    points = rs.DivideCurve(curve, num_pnts)
-    #
+    return int(rs.CurveLength(curve)/(offset/12))
 
 
 def get_winding_order(t, curve, points):
@@ -86,14 +80,16 @@ def get_corner(t, outer_curve, inner_curve, points):
 
 
 def get_isocontours(t, curve, parent, wall_mode=False, walls=3):
-    #max_depth = get_max_depth(t, curve)
+    offset = t.get_extrude_width()
+    #max_depth = (get_size(curve) / (offset)) / 2
+    #print("max depth: "+str(max_depth))
     new_curves = get_isocontour(t, curve)
     if not new_curves:
         return []
     else:
         curves = [] + new_curves
         new_depth = parent["depth"]+1
-        if not wall_mode or (wall_mode and new_depth < walls):
+        if (not wall_mode or (wall_mode and new_depth < walls)):
             for c in new_curves:
                 node = {"guid":c, "depth":new_depth, "parent":parent, "children":[]}
                 parent["children"].append(node)
@@ -118,7 +114,7 @@ def get_isocontour(t, curve):
     num_pnts = get_num_points(t, curve)
 
     if num_pnts <= 5:
-        print("Error: precision too low or curve too small")
+        #print("Precision too low or curve too small")
         return None
 
     points = rs.DivideCurve(curve, num_pnts)
@@ -793,7 +789,7 @@ def fill_curves_with_fermat_spiral(t, curves, start_pnt=None, wall_mode=False, w
     if new_curves:
         isocontours = isocontours + new_curves
 
-    travel = []
+    travel_paths = []
 
     region_tree = segment_tree(root)
     set_node_types(region_tree)
@@ -815,15 +811,18 @@ def fill_curves_with_fermat_spiral(t, curves, start_pnt=None, wall_mode=False, w
             print("Error: node with no curves in it at all", n)
 
     #print("Connecting Spiralled Regions")
-    final_spiral = connect_spiralled_nodes(t, region_tree)
+    final_points = connect_spiralled_nodes(t, region_tree)
+    final_curve = rs.AddCurve(final_points)
+    final_spiral = rs.DivideCurve(final_curve, int(rs.CurveLength(final_curve)/t.get_resolution()))
+    print(len(final_points), len(final_spiral))
     t.pen_up()
-    travel.append(rs.AddCurve([t.get_position(), final_spiral[0]]))
+    travel_paths.append(rs.AddCurve([t.get_position(), final_spiral[0]]))
     t.set_position(final_spiral[0].X, final_spiral[0].Y, final_spiral[0].Z)
     t.pen_down()
     for p in final_spiral:
         t.set_position(p.X, p.Y, p.Z)
 
-    return travel
+    return travel_paths
 
 
 def fill_curves_with_spiral(t, curves, start_pnt=None):
@@ -845,7 +844,7 @@ def fill_curves_with_spiral(t, curves, start_pnt=None):
     all_nodes = get_all_nodes(region_tree)
 
     #print("Spiralling Regions")
-    travel = []
+    travel_paths = []
     for node in all_nodes:
         if 'root' in node['curves']: node['curves'].remove('root')
         if len(node['curves']) > 0:
@@ -856,7 +855,7 @@ def fill_curves_with_spiral(t, curves, start_pnt=None):
                     start_idx, d = closest_point(start_pnt, rs.DivideCurve(node['curves'][0], num_pnts))
                 spiral, indices = spiral_contours(t, node["curves"], start_idx)
                 t.pen_up()
-                travel.append(rs.AddCurve([t.get_position(), spiral[0]]))
+                travel_paths.append(rs.AddCurve([t.get_position(), spiral[0]]))
                 t.set_position(spiral[0].X, spiral[0].Y, spiral[0].Z)
                 t.pen_down()
                 for p in spiral:
@@ -864,13 +863,13 @@ def fill_curves_with_spiral(t, curves, start_pnt=None):
             elif node['type'] == 2:
                 points = rs.DivideCurve(node["curves"][0], num_pnts)
                 t.pen_up()
-                travel.append(rs.AddCurve([t.get_position(), spiral[0]]))
+                travel_paths.append(rs.AddCurve([t.get_position(), spiral[0]]))
                 t.set_position(points[0].X, points[0].Y, points[0].Z)
                 t.pen_down()
                 for p in points:
                     t.set_position(p.X, p.Y, p.Z)
 
-    return travel
+    return travel_paths
 
 
 def fill_curves_with_contours(t, curves):
@@ -888,12 +887,12 @@ def fill_curves_with_contours(t, curves):
 
     isocontours = [rs.DivideCurve(i, get_num_points(t, i)) for i in isocontours]
 
-    travel = []
+    travel_paths = []
     start_idx = 0
     for i in range(len(isocontours)):
         start = isocontours[i][start_idx]
         t.pen_up()
-        travel.append(rs.AddCurve([t.get_position(), start]))
+        travel_paths.append(rs.AddCurve([t.get_position(), start]))
         t.set_position(start.X, start.Y, start.Z)
         t.pen_down()
 
@@ -905,50 +904,11 @@ def fill_curves_with_contours(t, curves):
         if i<len(isocontours)-1:
             start_idx, d = closest_point(start, isocontours[i+1])
 
-    return travel
+    return travel_paths
 
 
 def slice_fermat_fill(t, shape, start=0, end=None, wall_mode=False, walls=3, fill_bottom=False, bottom_layers=3):
-    travel = []
-    layers = int(math.floor(get_shape_height(shape) / t.get_layer_height())) + 1
-
-    if end is None: end = layers
-
-    for l in range(start, min(layers, end+1)):
-        plane = get_plane(l*t.get_layer_height())
-        curves = rs.AddSrfContourCrvs(shape, plane)
-
-        curve_groups = get_curve_groupings(curves)
-
-        for crvs in curve_groups:
-            if not wall_mode or (wall_mode and fill_bottom and l<bottom_layers):
-                travel = travel + fill_curves_with_fermat_spiral(t, crvs, start_pnt=t.get_position())
-            else:
-                travel = travel + fill_curves_with_fermat_spiral(t, crvs, start_pnt=t.get_position(), wall_mode=wall_mode, walls=walls)
- 
-    return travel
-
-
-def slice_spiral_fill(t, shape, start=0, end=None):
-    travel = []
-    layers = int(math.floor(get_shape_height(shape) / t.get_layer_height())) + 1
-
-    if end is None: end = layers
-
-    for l in range(start, min(layers, end+1)):
-        plane = get_plane(l*t.get_layer_height())
-        curves = rs.AddSrfContourCrvs(shape, plane)
-
-        curve_groups = get_curve_groupings(curves)
-
-        for crvs in curve_groups:
-            travel = travel + fill_curves_with_spiral(t, crvs, start_pnt=t.get_position())
-
-    return travel
-
-
-def slice_contour_fill(t, shape, start=0, end=None):
-    travel = []
+    travel_paths = []
     layers = int(math.floor(get_shape_height(shape) / t.get_layer_height())) + 1
 
     if end is None: end = layers
@@ -960,15 +920,54 @@ def slice_contour_fill(t, shape, start=0, end=None):
         curve_groups = get_curve_groupings(curves)
 
         for crvs in curve_groups:
-            travel = travel + fill_curves_with_contours(t, crvs)
+            if not wall_mode or (wall_mode and fill_bottom and l<bottom_layers):
+                travel_paths = travel_paths + fill_curves_with_fermat_spiral(t, crvs, start_pnt=t.get_position())
+            else:
+                travel_paths = travel_paths + fill_curves_with_fermat_spiral(t, crvs, start_pnt=t.get_position(), wall_mode=wall_mode, walls=walls)
+ 
+    return travel_paths
 
-    return travel
+
+def slice_spiral_fill(t, shape, start=0, end=None):
+    travel_paths = []
+    layers = int(math.floor(get_shape_height(shape) / t.get_layer_height())) + 1
+
+    if end is None: end = layers
+
+    for l in range(start, min(layers, end)):
+        plane = get_plane(l*t.get_layer_height())
+        curves = rs.AddSrfContourCrvs(shape, plane)
+
+        curve_groups = get_curve_groupings(curves)
+
+        for crvs in curve_groups:
+            travel_paths = travel_paths + fill_curves_with_spiral(t, crvs, start_pnt=t.get_position())
+
+    return travel_paths
+
+
+def slice_contour_fill(t, shape, start=0, end=None):
+    travel_paths = []
+    layers = int(math.floor(get_shape_height(shape) / t.get_layer_height())) + 1
+
+    if end is None: end = layers
+
+    for l in range(start, min(layers, end)):
+        plane = get_plane(l*t.get_layer_height())
+        curves = rs.AddSrfContourCrvs(shape, plane)
+
+        curve_groups = get_curve_groupings(curves)
+
+        for crvs in curve_groups:
+            travel_paths = travel_paths + fill_curves_with_contours(t, crvs)
+
+    return travel_paths
 
 
 def slice_vertical_and_fermat_fill(t, shape, wall_mode=False, walls=3, fill_bottom=False, bottom_layers=3):
     overall_start_time = time.time()
 
-    travel = []
+    travel_paths = []
     center_points = []
     try:
         tree, path, center_points = best_vertical_path(t, shape)
@@ -976,12 +975,13 @@ def slice_vertical_and_fermat_fill(t, shape, wall_mode=False, walls=3, fill_bott
         for sup_node in path:
             for node in sup_node.data.sub_nodes:
                 if not wall_mode or (wall_mode and fill_bottom and node.height<bottom_layers):
-                    travel = travel + fill_curves_with_fermat_spiral(t, node.data, start_pnt=node.start_point)
+                    travel_paths = travel_paths + fill_curves_with_fermat_spiral(t, node.data, start_pnt=node.start_point)
                 else:
-                    travel = travel + fill_curves_with_fermat_spiral(t, node.data, start_pnt=node.start_point, wall_mode=wall_mode, walls=walls)
+                    travel_paths = travel_paths + fill_curves_with_fermat_spiral(t, node.data, start_pnt=node.start_point, wall_mode=wall_mode, walls=walls)
     except:
-        travel = travel + slice_fermat_fill(t, shape, wall_mode=wall_mode, walls=walls, fill_bottom=fill_bottom, bottom_layers=bottom_layers)
+        print("Failed to find vertical travel path minimization, printing layer by layer.")
+        travel_paths = travel_paths + slice_fermat_fill(t, shape, wall_mode=wall_mode, walls=walls, fill_bottom=fill_bottom, bottom_layers=bottom_layers)
 
     print("Full path generation: "+str(time.time()-overall_start_time)+" seconds")
 
-    return travel, center_points
+    return travel_paths, center_points
