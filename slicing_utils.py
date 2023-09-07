@@ -16,7 +16,7 @@ import graph_utils
 from graph_utils import *
 
 def get_num_points(curve, offset):
-    return int(rs.CurveLength(curve)/(offset/11))
+    return int(rs.CurveLength(curve)/(offset/7))
 
 
 def get_winding_order(curve, points, offset):
@@ -874,7 +874,7 @@ def fill_curves_with_contours(t, curves):
         curve = connect_curves(curves, t.get_extrude_width()/2)
 
     # slice the shape
-    first_curve = get_isocontour(curve, t.get_extrude_width()/2)[0]
+    first_curve = sorted(get_isocontour(curve, t.get_extrude_width()/2), key=lambda x: rs.Area(x), reverse=True)[0]
     root = {"guid": first_curve, "depth": 0, "children":[]}
     isocontours = [] + [first_curve]
     new_curves = get_isocontours(t, first_curve, root)
