@@ -772,11 +772,11 @@ def fill_curves_with_fermat_spiral(t, curves, start_pnt=None, wall_mode=False, w
     # connect curves if given more than one
     curve = curves[0]
     if len(curves) > 1:
-        curve = connect_curves(curves, t.get_extrude_width()/2)
+        curve = connect_curves(curves, t.get_extrude_width()/8)
 
     # slice the shape
     #print("Generating Isocontours")
-    first_curve = get_isocontour(curve, t.get_extrude_width()/2)[0]
+    first_curve = sorted(get_isocontour(curve, t.get_extrude_width()/2), key=lambda x: rs.Area(x), reverse=True)[0]
     root = {"guid": first_curve, "depth": 0, "children":[]}
     isocontours = [] + [first_curve]
     new_curves = get_isocontours(t, first_curve, root, wall_mode, walls)
@@ -823,11 +823,11 @@ def fill_curves_with_spiral(t, curves, start_pnt=None):
     # connect curves if given more than one
     curve = curves[0]
     if len(curves) > 1:
-        curve = connect_curves(curves, t.get_extrude_width()/2)
+        curve = connect_curves(curves, t.get_extrude_width()/8)
 
     # slice the shape
     #print("Generating Isocontours")
-    first_curve = get_isocontour(curve, t.get_extrude_width()/2)[0]
+    first_curve = sorted(get_isocontour(curve, t.get_extrude_width()/2), key=lambda x: rs.Area(x), reverse=True)[0]
     root = {"guid": first_curve, "depth": 0, "children":[]}
     isocontours = [] + [first_curve]
     new_curves = get_isocontours(t, first_curve, root)
@@ -871,7 +871,7 @@ def fill_curves_with_contours(t, curves):
     # connect curves if given more than one
     curve = curves[0]
     if len(curves) > 1:
-        curve = connect_curves(curves, t.get_extrude_width()/2)
+        curve = connect_curves(curves, t.get_extrude_width()/8)
 
     # slice the shape
     first_curve = sorted(get_isocontour(curve, t.get_extrude_width()/2), key=lambda x: rs.Area(x), reverse=True)[0]
