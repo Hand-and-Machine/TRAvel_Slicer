@@ -768,7 +768,7 @@ def get_edge_tuples(graph):
     return sorted(ordered_edges, key=lambda x: x[2], reverse=True)
 
 
-def fill_curves_with_fermat_spiral(t, curves, start_pnt=None, wall_mode=False, walls=3):    
+def fill_curves_with_fermat_spiral(t, curves, start_pnt=None, wall_mode=False, walls=3, initial_offset=0.5):    
     # connect curves if given more than one
     curve = curves[0]
     if len(curves) > 1:
@@ -776,7 +776,7 @@ def fill_curves_with_fermat_spiral(t, curves, start_pnt=None, wall_mode=False, w
 
     # slice the shape
     #print("Generating Isocontours")
-    first_curve = sorted(get_isocontour(curve, t.get_extrude_width()/2), key=lambda x: rs.Area(x), reverse=True)[0]
+    first_curve = sorted(get_isocontour(curve, t.get_extrude_width()*initial_offset), key=lambda x: rs.Area(x), reverse=True)[0]
     root = {"guid": first_curve, "depth": 0, "children":[]}
     isocontours = [] + [first_curve]
     new_curves = get_isocontours(t, first_curve, root, wall_mode, walls)
@@ -903,9 +903,11 @@ def fill_curves_with_contours(t, curves):
     return travel_paths
 
 
-def slice_fermat_fill(t, shape, start=0, end=None, wall_mode=False, walls=3, fill_bottom=False, bottom_layers=3):
+def slice_fermat_fill(t, shape, start=0, end=None, wall_mode=False, walls=3, fill_bottom=False, bottom_layers=3, initial_offset=0.5):
     travel_paths = []
     layers = int(math.floor(get_shape_height(shape) / t.get_layer_height())) + 1
+
+    print("Number of layers: "+str(layers-1))
 
     if end is None: end = layers
 
@@ -917,9 +919,9 @@ def slice_fermat_fill(t, shape, start=0, end=None, wall_mode=False, walls=3, fil
 
         for crvs in curve_groups:
             if not wall_mode or (wall_mode and fill_bottom and l<bottom_layers):
-                travel_paths = travel_paths + fill_curves_with_fermat_spiral(t, crvs, start_pnt=t.get_position())
+                travel_paths = travel_paths + fill_curves_with_fermat_spiral(t, crvs, start_pnt=t.get_position(), initial_offset=initial_offset)
             else:
-                travel_paths = travel_paths + fill_curves_with_fermat_spiral(t, crvs, start_pnt=t.get_position(), wall_mode=wall_mode, walls=walls)
+                travel_paths = travel_paths + fill_curves_with_fermat_spiral(t, crvs, start_pnt=t.get_position(), wall_mode=wall_mode, walls=walls, initial_offset=initial_offset)
  
     return travel_paths
 
@@ -927,6 +929,8 @@ def slice_fermat_fill(t, shape, start=0, end=None, wall_mode=False, walls=3, fil
 def slice_spiral_fill(t, shape, start=0, end=None):
     travel_paths = []
     layers = int(math.floor(get_shape_height(shape) / t.get_layer_height())) + 1
+
+    print("Number of layers: "+str(layers-1))
 
     if end is None: end = layers
 
@@ -945,6 +949,8 @@ def slice_spiral_fill(t, shape, start=0, end=None):
 def slice_contour_fill(t, shape, start=0, end=None):
     travel_paths = []
     layers = int(math.floor(get_shape_height(shape) / t.get_layer_height())) + 1
+
+    print("Number of layers: "+str(layers-1))
 
     if end is None: end = layers
 
