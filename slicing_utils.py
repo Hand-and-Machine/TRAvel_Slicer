@@ -1099,14 +1099,15 @@ def two_wall_slice(t, shape, initial_offset=0.5):
             for crv in [first_curve, second_curve]:
                 if crv is not None and rs.IsCurve(crv):
                     points = rs.DivideCurve(crv, int(rs.CurveLength(crv)/t.get_resolution()))
-                    start_idx, d = closest_point(t.get_position(), points)
-                    travel = travel + [rs.AddCurve([t.get_position(), points[start_idx]])]
-                    t.pen_up()
-                    t.set_position(points[start_idx].X, points[start_idx].Y, points[start_idx].Z)
-                    t.pen_down()
-                    for p in (range(start_idx+1, len(points)) + range(0, start_idx)):
-                        t.set_position(points[p].X, points[p].Y, points[p].Z)
-                    t.set_position(points[start_idx].X, points[start_idx].Y, points[start_idx].Z)
+                    if points is not None:
+                        start_idx, d = closest_point(t.get_position(), points)
+                        travel = travel + [rs.AddCurve([t.get_position(), points[start_idx]])]
+                        t.pen_up()
+                        t.set_position(points[start_idx].X, points[start_idx].Y, points[start_idx].Z)
+                        t.pen_down()
+                        for p in (range(start_idx+1, len(points)) + range(0, start_idx)):
+                            t.set_position(points[p].X, points[p].Y, points[p].Z)
+                        t.set_position(points[start_idx].X, points[start_idx].Y, points[start_idx].Z)
 
     return travel
 
