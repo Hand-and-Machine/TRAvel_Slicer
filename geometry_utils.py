@@ -1,6 +1,12 @@
 import Rhino
 import rhinoscriptsyntax as rs
 
+def get_area(curve):
+    try:
+        return rs.Area(curve)
+    except:
+        return 0
+
 def get_size(shape):
     # bounding box of shape
     bb = rs.BoundingBox(shape)
@@ -46,6 +52,34 @@ def get_surface(curve, z):
     return surface
 
 
+def get_num_points(curve, offset):
+    return int(rs.CurveLength(curve)/(offset/5))
+
+
+def get_winding_order(curve, points, offset):
+    # get winding order, CW or CCW
+    winding_order = None
+
+    for i in range(4):
+        index = i*(len(points)/4)
+
+        tangent = rs.VectorSubtract(points[index+1], points[index-1])
+        pnt_cw = rs.VectorAdd(points[index], rs.VectorScale(rs.VectorUnitize(rs.VectorRotate(tangent, -90, [0, 0, 1])), offset/10))
+        pnt_ccw = rs.VectorAdd(points[index], rs.VectorScale(rs.VectorUnitize(rs.VectorRotate(tangent, 90, [0, 0, 1])), offset/10))
+
+        direction = None
+        if rs.PointInPlanarClosedCurve(pnt_cw, curve):
+            winding_order = "CW"
+            direction = -90
+            break
+        elif rs.PointInPlanarClosedCurve(pnt_ccw, curve):
+            winding_order = "CCW"
+            direction = 90
+            break
+
+    return winding_order, direction
+
+
 def closest_point(point, points):
     closest = {"point": None, "distance": 1000000}
     for p in range(len(points)):
@@ -55,6 +89,18 @@ def closest_point(point, points):
             closest['point'] = p
     
     return closest['point'], closest['distance']
+
+
+def get_curves(shape, z):
+    plane = get_plane(z)
+    curves = rs.AddSrfContourCrvs(shape, plane)
+    curves = [curve for curve in curves if curve is not None and rs.IsCurve(curve)]
+    try:
+        curve_groups = get_curve_groupings(curves)
+        return curve_groups
+    except:
+        return [curves]
+
 
 def get_curve_groupings(curves):
     # find curve groupings from intersection of shape with plane
@@ -116,8 +162,6 @@ def split_curve(curve, split_point, tolerance):
     # length of the curve between those two indices
     new_points = [None]*len(points)
     remove_idxs = []
-    #print('closest', closest_idx)
-    #print('number of points', len(points))
     for p in range(len(points)):
         new_points[p] = points[p]
         if p == closest_idx:

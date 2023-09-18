@@ -109,11 +109,7 @@ def build_vertical_tree(t, shape):
     center_points = []
     previous_nodes = [root]
     for l in range(layers):
-        z = l*t.get_layer_height()
-        plane = get_plane(z)
-        curves = rs.AddSrfContourCrvs(shape, plane)
-
-        curve_groups = get_curve_groupings(curves)
+        curve_groups = get_curves(l*t.get_layer_height(), shape)
 
         center_point = rs.CreatePoint(0, 0, 0)
         outer_curves = []

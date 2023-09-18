@@ -12,39 +12,15 @@ from geometry_utils import *
 import vertical_utils
 from vertical_utils import *
 
+import contour_utils
+from contour_utils import *
+
 import graph_utils
 from graph_utils import *
 
-def get_num_points(curve, offset):
-    return int(rs.CurveLength(curve)/(offset/5))
-
-
-def get_winding_order(curve, points, offset):
-    # get winding order, CW or CCW
-    winding_order = None
-
-    for i in range(4):
-        index = i*(len(points)/4)
-
-        tangent = rs.VectorSubtract(points[index+1], points[index-1])
-        pnt_cw = rs.VectorAdd(points[index], rs.VectorScale(rs.VectorUnitize(rs.VectorRotate(tangent, -90, [0, 0, 1])), offset/10))
-        pnt_ccw = rs.VectorAdd(points[index], rs.VectorScale(rs.VectorUnitize(rs.VectorRotate(tangent, 90, [0, 0, 1])), offset/10))
-
-        direction = None
-        if rs.PointInPlanarClosedCurve(pnt_cw, curve):
-            winding_order = "CW"
-            direction = -90
-            break
-        elif rs.PointInPlanarClosedCurve(pnt_ccw, curve):
-            winding_order = "CCW"
-            direction = 90
-            break
-
-    return winding_order, direction
-
 
 def get_corner(t, outer_curve, inner_curve, points):
-    offset = t.get_extrude_width()
+    offset = float(t.get_extrude_width())
 
     prec = 100
     pnts = rs.DivideCurve(inner_curve, prec)
@@ -77,163 +53,6 @@ def get_corner(t, outer_curve, inner_curve, points):
     return closest["point"]
 
 
-def get_isocontours(t, curve, parent, recursion=0, wall_mode=False, walls=3):
-    if recursion > 10:
-        print("Recursion exceeded limit")
-        return
-    new_curves = get_isocontour(curve, t.get_extrude_width())
-    if not new_curves:
-        return []
-    else:
-        curves = [] + new_curves
-        new_depth = parent["depth"]+1
-        if (not wall_mode or (wall_mode and new_depth < walls)):
-            for c in new_curves:
-                node = {"guid":c, "depth":new_depth, "parent":parent, "children":[]}
-                parent["children"].append(node)
-                new_new_curves = get_isocontours(t, c, node, recursion=recursion+1, wall_mode=wall_mode, walls=walls)
-                for nc in new_new_curves:
-                    curves.append(nc)
-        return curves
-
-
-def get_isocontour(curve, offset):
-    if not curve:
-        print("Error: get_isocontours not called with a curve", curve)
-        return None
-    elif not rs.IsCurveClosed(curve):
-        if rs.IsCurveClosable(curve, offset*1.5):
-            curve = rs.CloseCurve(curve, offset*1.5)
-        else:
-            print("Error: get_isocontours called with an unclosable curve: ", curve)
-            return None
-
-    num_pnts = get_num_points(curve, offset)
-
-    if num_pnts <= 5:
-        #print("Precision too low or curve too small")
-        return None
-
-    points = rs.DivideCurve(curve, num_pnts)
-    winding_order, direction = get_winding_order(curve, points, offset)
-
-    if winding_order == None:
-        print("Error: winding order could not return a direction")
-        return None
-
-    # determine each new p' at distance offset away from p
-    new_points = [None]*len(points)
-    discarded_points = [None]*len(points)
-    for i in range(len(points)):
-        prev_i = (i-1) % len(points)
-        next_i = (i+1) % len(points)
-
-        # get tangent vector
-        tangent = rs.VectorSubtract(points[next_i], points[prev_i])
-        # get vector orthogonal to tangent vector
-        ortho = rs.VectorRotate(tangent, direction, [0, 0, 1])
-        # normalize and scale orthogonal vector
-        ortho = rs.VectorScale(ortho, offset/rs.VectorLength(ortho))
-        # compute new point
-        new_point = rs.VectorAdd(points[i], ortho)
-
-        # make sure point is actually inside curve
-        include = True
-        if not rs.PointInPlanarClosedCurve(new_point, curve):
-            include = False
-        else:
-            # check that distance from all points is >= offset
-            idx_range = range(max(i-10, 0), len(points), 4) + range(0, max(i-10, 0), 4)
-            for j in idx_range:
-                if not i == j and rs.Distance(points[j], new_point) < offset:
-                    include = False
-                    break
-        if include:
-            new_points[i] = new_point
-        else:
-            discarded_points[i] = new_point
-
-    # if there are new points
-    if not all(x is None for x in new_points):
-        # if any points have been discarded
-        if not all(x is None for x in discarded_points):
-            # get list of lists of all sequential indices
-            sequences = [[]]
-            start_index = next((index for index, value in enumerate(new_points) if value != None and new_points[index-1] == None), -1)
-            if start_index !=- 1:
-                indices = range(start_index, len(new_points)) + range(0, start_index)
-                for i in indices:
-                    next_i = (i+1)%len(new_points)
-                    if new_points[i] != None:
-                        sequences[-1].append(i)
-                    elif new_points[next_i] != None and next_i != start_index:
-                        sequences.append([])
-
-            # remove sequences that consist of a single point
-            #for seq in sequences:
-                #if len(seq) <= 1:
-                    #sequences.remove(seq)
-
-            # get start and end points of all sequences
-            start = [seq[0] for seq in sequences]
-            end = [seq[-1] for seq in sequences]
-
-            # get connections between sequences
-            # prime connections dictionary with None
-            # index and large initial minimum distance
-            connections = {j: (None, 100000) for j in end}
-            for i in start:
-                for j in end:
-                    if i!=j:
-                        dist = rs.Distance(new_points[i], new_points[j])
-                        if dist < connections[j][1]:
-                            connections[j] = (i, dist)
-
-            # get rid of distances now that
-            # connections have been made
-            connections = {j: connections[j][0] for j in connections}
-
-            # get sequence grouping indices of connections
-            nodes = [[i] for i in range(len(sequences))]
-
-            # check through groupings until no more
-            # connections are found between sequences
-            connections_found = True
-            while connections_found:
-                connections_found = False
-                for node in nodes:
-                    idx = nodes.index(node)
-                    seq = sequences[node[-1]]
-                    connect = connections[seq[-1]]
-                    for node2 in nodes:
-                        seq2 = sequences[node2[0]]
-                        idx2 = nodes.index(node2)
-                        if idx != idx2 and connect in seq2:
-                            nodes[idx] = nodes[idx] + nodes[idx2]
-                            nodes.pop(idx2)
-                            connections_found = True
-
-            # construct curves from groupings of indices
-            curves = []
-            for node in nodes:
-                curves.append([])
-                for idx in node:
-                    curves[-1] = curves[-1] + [new_points[i] for i in sequences[idx]]
-
-            # make sure curve is closed;
-            # add start point to the end
-            curves = [c+[c[0]] for c in curves]
-
-            # Transform point lists into curves
-            curves = [rs.AddCurve(c) for c in curves if len(c) > 5]
-
-            return curves #, new_points, discarded_points
-        else:
-            return [rs.AddCurve(new_points + [new_points[0]])] #, new_points, discarded_points
-    else:
-        return None
-
-
 def spiral_contours(t, isocontours, start_index):
     if len(isocontours) == 0:
         print("Error: no isocontours passed in")
@@ -241,7 +60,7 @@ def spiral_contours(t, isocontours, start_index):
     # a single spirallable region
     # connect each isocontour with the one succeeding it
     spiral = []
-    offset = t.get_extrude_width()
+    offset = float(t.get_extrude_width())
     num_pnts = get_num_points(isocontours[0], offset)
     points = rs.DivideCurve(isocontours[0], num_pnts)
 
@@ -303,7 +122,7 @@ def spiral_contours(t, isocontours, start_index):
 
 
 def fermat_spiral(t, spiral, indices):
-    offset = t.get_extrude_width()
+    offset = float(t.get_extrude_width())
 
     # spiral path inward
     in_spiral = []
@@ -548,7 +367,7 @@ def find_connections(t, node):
 
 
 def connect_node_to_parent(t, node, parent):
-    offset = t.get_extrude_width()
+    offset = float(t.get_extrude_width())
 
     node_start, node_end = get_connection_indices(t, node)
 
@@ -602,7 +421,7 @@ def connect_node_to_parent(t, node, parent):
 
 
 def get_connection_indices(t, node):
-    offset = t.get_extrude_width()
+    offset = float(t.get_extrude_width())
 
     start_index = 0
     end_index = len(node['fermat_spiral']) - 1
@@ -719,7 +538,7 @@ def connect_curves(curves, offset):
             if weight > max_weight: max_weight = weight
             split_points.append(split_point)
 
-        split_curves, split_ends = split_curve_at(node1.data, split_points, offset)
+        split_curves, split_ends = split_curve_at(node1.data, split_points, tolerance=offset)
         new_curves[node1] = split_curves
         curve_ends[node1] = split_ends
 
@@ -740,7 +559,7 @@ def connect_curves(curves, offset):
         pnt2_1 = ends2[0][0]
         pnt2_2 = ends2[1][0]
 
-        if rs.Distance(pnt1_1, pnt2_1) < rs.Distance(pnt1_1, pnt2_2):
+        if rs.CurveCurveIntersection(rs.AddCurve([pnt1_1, pnt2_1]), rs.AddCurve([pnt1_2, pnt2_2]))[0] == 0:
             all_curves.append(rs.AddCurve([pnt1_1, pnt2_1]))
             all_curves.append(rs.AddCurve([pnt1_2, pnt2_2]))
         else:
@@ -778,20 +597,11 @@ def fill_curves_with_fermat_spiral(t, curves, start_pnt=None, wall_mode=False, w
     # connect curves if given more than one
     curve = curves[0]
     if len(curves) > 1:
-        curve = connect_curves(curves, t.get_extrude_width()/8)
+        curve = connect_curves(curves, float(t.get_extrude_width())/8)
 
     # slice the shape
-    #print("Generating Isocontours")
-    first_contours = get_isocontour(curve, t.get_extrude_width()*initial_offset)
-    first_curve = first_contours[0]
-    if len(first_contours) > 0:
-        first_curve = sorted(first_contours, key=lambda x: rs.Area(x), reverse=True)[0]
-
-    root = {"guid": first_curve, "depth": 0, "children":[]}
-    isocontours = [] + [first_curve]
-    new_curves = get_isocontours(t, first_curve, root, wall_mode=wall_mode, walls=walls)
-    if new_curves:
-        isocontours = isocontours + new_curves
+    # Generate isocontours
+    root, isocontours = get_contours(t, curve, walls=walls, wall_mode=wall_mode, initial_offset=initial_offset)
 
     travel_paths = []
 
@@ -799,10 +609,10 @@ def fill_curves_with_fermat_spiral(t, curves, start_pnt=None, wall_mode=False, w
     set_node_types(region_tree)
     all_nodes = get_all_nodes(region_tree)
 
-    #print("Spiralling Regions")
+    # Spiralling Regions
     for n in all_nodes:
         if len(n.get('curves')) > 0:
-            num_pnts = get_num_points(n['curves'][0], t.get_extrude_width())
+            num_pnts = get_num_points(n['curves'][0], float(t.get_extrude_width()))
             if n['type'] == 1:
                 start_idx = None
                 if start_pnt:
@@ -814,7 +624,7 @@ def fill_curves_with_fermat_spiral(t, curves, start_pnt=None, wall_mode=False, w
         else:
             print("Error: node with no curves in it at all", n)
 
-    #print("Connecting Spiralled Regions")
+    # Connect Spiralled Regions
     final_points = connect_spiralled_nodes(t, region_tree)
     final_curve = rs.AddCurve(final_points)
     final_spiral = rs.DivideCurve(final_curve, int(rs.CurveLength(final_curve)/t.get_resolution()))
@@ -833,27 +643,22 @@ def fill_curves_with_spiral(t, curves, start_pnt=None):
     # connect curves if given more than one
     curve = curves[0]
     if len(curves) > 1:
-        curve = connect_curves(curves, t.get_extrude_width()/8)
+        curve = connect_curves(curves, float(t.get_extrude_width())/8)
 
     # slice the shape
-    #print("Generating Isocontours")
-    first_curve = sorted(get_isocontour(curve, t.get_extrude_width()/2), key=lambda x: rs.Area(x), reverse=True)[0]
-    root = {"guid": first_curve, "depth": 0, "children":[]}
-    isocontours = [] + [first_curve]
-    new_curves = get_isocontours(t, first_curve, root)
-    if new_curves:
-        isocontours = isocontours + new_curves
+    # Generate isocontours
+    root, isocontours = get_contours(t, curve)
 
     region_tree = segment_tree(root)
     set_node_types(region_tree)
     all_nodes = get_all_nodes(region_tree)
 
-    #print("Spiralling Regions")
+    # Spiral Regions
     travel_paths = []
     for node in all_nodes:
         if 'root' in node['curves']: node['curves'].remove('root')
         if len(node['curves']) > 0:
-            num_pnts = get_num_points(node['curves'][0], t.get_extrude_width())
+            num_pnts = get_num_points(node['curves'][0], float(t.get_extrude_width()))
             if node['type'] == 1:
                 start_idx = None
                 if start_pnt:
@@ -877,38 +682,35 @@ def fill_curves_with_spiral(t, curves, start_pnt=None):
     return travel_paths
 
 
-def fill_curves_with_contours(t, curves, wall_mode=False, walls=3, initial_offset=0.5):
+def fill_curves_with_contours(t, curves, start_pnt=None, wall_mode=False, walls=3, initial_offset=0.5):
+    offset = float(t.get_extrude_width())
+
     # connect curves if given more than one
     curve = curves[0]
     if len(curves) > 1:
-        curve = connect_curves(curves, t.get_extrude_width()/8)
+        curve = connect_curves(curves, offset/8)
 
     # slice the shape
-    first_curve = sorted(get_isocontour(curve, t.get_extrude_width()*initial_offset), key=lambda x: rs.Area(x), reverse=True)[0]
-    root = {"guid": first_curve, "depth": 0, "children":[]}
-    isocontours = [] + [first_curve]
-    new_curves = get_isocontours(t, first_curve, root, wall_mode=wall_mode, walls=walls)
-    if new_curves:
-        isocontours = isocontours + new_curves
+    # Generate isocontours
+    root, isocontours = get_contours(t, curve, walls=walls, wall_mode=wall_mode, initial_offset=initial_offset)
 
-    isocontours = [rs.DivideCurve(i, get_num_points(i, t.get_extrude_width())) for i in isocontours]
+    isocontours = [rs.DivideCurve(i, int(rs.CurveLength(i)/t.get_resolution())) for i in isocontours]
 
     travel_paths = []
     start_idx = 0
     for i in range(len(isocontours)):
-        start = isocontours[i][start_idx]
+        points = isocontours[i]
+        start_idx, d = closest_point(start_pnt, points)
+        if start_idx == None: start_idx = 0
+
+        travel_paths = travel_paths + [rs.AddCurve([t.get_position(), points[start_idx]])]
         t.pen_up()
-        travel_paths.append(rs.AddCurve([t.get_position(), start]))
-        t.set_position(start.X, start.Y, start.Z)
+        t.set_position(points[start_idx].X, points[start_idx].Y, points[start_idx].Z)
         t.pen_down()
 
-        points = [isocontours[i][idx] for idx in range(start_idx, len(isocontours[i])) + range(0, start_idx)]
-        for p in points:
-                t.set_position(p.X, p.Y, p.Z)
-        t.set_position(start.X, start.Y, start.Z)
-
-        if i<len(isocontours)-1:
-            start_idx, d = closest_point(start, isocontours[i+1])
+        for p in (range(start_idx+1, len(points)) + range(0, start_idx)):
+            t.set_position(points[p].X, points[p].Y, points[p].Z)
+        t.set_position(points[start_idx].X, points[start_idx].Y, points[start_idx].Z)
 
     return travel_paths
 
@@ -922,13 +724,7 @@ def slice_fermat_fill(t, shape, start=0, end=None, wall_mode=False, walls=3, fil
     if end is None: end = layers
 
     for l in range(start, min(layers, end)):
-        plane = get_plane(l*t.get_layer_height())
-        curves = rs.AddSrfContourCrvs(shape, plane)
-
-        try:
-            curve_groups = get_curve_groupings(curves)
-        except:
-            curve_groups = [curves]
+        curve_groups = get_curves(shape, l*t.get_layer_height())
 
         for crvs in curve_groups:
             try:
@@ -937,7 +733,14 @@ def slice_fermat_fill(t, shape, start=0, end=None, wall_mode=False, walls=3, fil
                 else:
                     travel_paths = travel_paths + fill_curves_with_fermat_spiral(t, crvs, start_pnt=t.get_position(), wall_mode=wall_mode, walls=walls, initial_offset=initial_offset)
             except:
-                print("Error: unable to slice layer "+str(l))
+                try:
+                    print("Unable to fermat spiral layer, generating contours: "+str(l))
+                    if not wall_mode or (wall_mode and fill_bottom and l<bottom_layers):
+                        travel_paths = travel_paths + fill_curves_with_contours(t, crvs, start_pnt=t.get_position(), initial_offset=initial_offset)
+                    else:
+                        travel_paths = travel_paths + fill_curves_with_contours(t, crvs, start_pnt=t.get_position(), wall_mode=wall_mode, walls=walls-1, initial_offset=initial_offset)
+                except:
+                    print("Error: unable to slice layer "+str(l))
 
     return travel_paths
 
@@ -951,10 +754,7 @@ def slice_spiral_fill(t, shape, start=0, end=None):
     if end is None: end = layers
 
     for l in range(start, min(layers, end)):
-        plane = get_plane(l*t.get_layer_height())
-        curves = rs.AddSrfContourCrvs(shape, plane)
-
-        curve_groups = get_curve_groupings(curves)
+        curve_groups = get_curves(shape, l*t.get_layer_height())
 
         for crvs in curve_groups:
             travel_paths = travel_paths + fill_curves_with_spiral(t, crvs, start_pnt=t.get_position())
@@ -971,16 +771,13 @@ def slice_contour_fill(t, shape, start=0, end=None, wall_mode=False, walls=3, fi
     if end is None: end = layers
 
     for l in range(start, min(layers, end)):
-        plane = get_plane(l*t.get_layer_height())
-        curves = rs.AddSrfContourCrvs(shape, plane)
-
-        curve_groups = get_curve_groupings(curves)
+        curve_groups = get_curves(shape, l*t.get_layer_height())
 
         for crvs in curve_groups:
             if not wall_mode or (wall_mode and fill_bottom and l<bottom_layers):
-                travel_paths = travel_paths + fill_curves_with_contours(t, crvs, wall_mode=wall_mode, walls=walls)
+                travel_paths = travel_paths + fill_curves_with_contours(t, crvs, start_pnt=t.get_position(), initial_offset=initial_offset)
             else:
-                travel_paths = travel_paths + fill_curves_with_fermat_spiral(t, crvs, start_pnt=t.get_position(), wall_mode=wall_mode, walls=walls, initial_offset=initial_offset)
+                travel_paths = travel_paths + fill_curves_with_contours(t, crvs, start_pnt=t.get_position(), wall_mode=wall_mode, walls=walls, initial_offset=initial_offset)
 
     return travel_paths
 
@@ -1011,14 +808,15 @@ def slice_vertical_and_fermat_fill(t, shape, wall_mode=False, walls=3, fill_bott
     return travel_paths, center_points
 
 def slice_2_half_D_fermat(t, curves, layers=3, wall_mode=False, walls=3, fill_bottom=False, bottom_layers=3, initial_offset=0.5):
+    print("slice_2_half_D_fermat called")
     groups = get_curve_groupings(curves)
     group = groups[0]
 
     curve = group[0]
     if len(group) > 1:
-        curve = connect_curves(curves, t.get_extrude_width()/8)
+        curve = connect_curves(curves, float(t.get_extrude_width())/8)
 
-    first_curve = sorted(get_isocontour(curve, t.get_extrude_width()*initial_offset), key=lambda x: rs.Area(x), reverse=True)[0]
+    first_curve = sorted(get_isocontour(curve, float(t.get_extrude_width())*initial_offset), key=lambda x: get_area(x), reverse=True)[0]
     root = {"guid": first_curve, "depth": 0, "children":[]}
     isocontours = [] + [first_curve]
     new_curves = get_isocontours(t, first_curve, root, wall_mode=wall_mode, walls=walls)
@@ -1034,7 +832,7 @@ def slice_2_half_D_fermat(t, curves, layers=3, wall_mode=False, walls=3, fill_bo
     for l in range(layers):
         for n in all_nodes:
             if len(n.get('curves')) > 0:
-                num_pnts = get_num_points(n['curves'][0], t.get_extrude_width())
+                num_pnts = get_num_points(n['curves'][0], float(t.get_extrude_width()))
                 if n['type'] == 1:
                     start_idx, d = closest_point(t.get_position(), rs.DivideCurve(n['curves'][0], num_pnts))
                     spiral, indices = spiral_contours(t, n["curves"], start_idx)
@@ -1060,19 +858,11 @@ def slice_2_half_D_fermat(t, curves, layers=3, wall_mode=False, walls=3, fill_bo
 
 def two_wall_slice(t, shape, initial_offset=0.5):
     layers = int(math.floor(get_shape_height(shape) / t.get_layer_height())) + 1
-    offset = t.get_extrude_width()
+    offset = float(t.get_extrude_width())
     travel = []
 
     for l in range(layers):
-        plane = get_plane(l*t.get_layer_height())
-        curves = rs.AddSrfContourCrvs(shape, plane)
-        curves = [curve for curve in curves if curve is not None and rs.IsCurve(curve)]
-
-        #curve_groups = []
-        #try:
-            #curve_groups = get_curve_groupings(curves)
-        #except:
-            #return curves
+        curves = get_curves(shape, l*t.get_layer_height())
 
         for curve in curves:
             # connect curves if given more than one
@@ -1086,7 +876,7 @@ def two_wall_slice(t, shape, initial_offset=0.5):
             if first_contours is not None:
                 first_curve = first_contours[0]
                 if len(first_contours) > 0:
-                    first_curve = sorted(first_contours, key=lambda x: getArea(x), reverse=True)[0]
+                    first_curve = sorted(first_contours, key=lambda x: get_area(x), reverse=True)[0]
 
             # second contour
             second_contours = get_isocontour(first_curve, offset)
@@ -1094,7 +884,7 @@ def two_wall_slice(t, shape, initial_offset=0.5):
             if second_contours is not None:
                 second_curve = second_contours[0]
                 if len(second_contours) > 0:
-                    second_curve = sorted(second_contours, key=lambda x: getArea(x), reverse=True)[0]
+                    second_curve = sorted(second_contours, key=lambda x: get_area(x), reverse=True)[0]
 
             for crv in [first_curve, second_curve]:
                 if crv is not None and rs.IsCurve(crv):
@@ -1110,9 +900,3 @@ def two_wall_slice(t, shape, initial_offset=0.5):
                         t.set_position(points[start_idx].X, points[start_idx].Y, points[start_idx].Z)
 
     return travel
-
-def getArea(curve):
-    try:
-        return rs.Area(curve)
-    except:
-        return 0
