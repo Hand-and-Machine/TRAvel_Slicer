@@ -435,9 +435,7 @@ def get_connection_indices(t, node):
         if connections:
             connection = [connections[n].keys() for n in connections]
             for c in connection:
-                connect_indices = []
-                if c[0] > c[1]: connect_indices = range(c[0], c[1]-1, -1)
-                else:  connect_indices = range(c[0], c[1]+1)
+                connect_indices = get_shortest_indices(c[0], c[1], points)
                 available_indices = [x for x in available_indices if not x in connect_indices]
 
             # set start index
@@ -808,7 +806,6 @@ def slice_vertical_and_fermat_fill(t, shape, wall_mode=False, walls=3, fill_bott
     return travel_paths, center_points
 
 def slice_2_half_D_fermat(t, curves, layers=3, wall_mode=False, walls=3, fill_bottom=False, bottom_layers=3, initial_offset=0.5):
-    print("slice_2_half_D_fermat called")
     groups = get_curve_groupings(curves)
     group = groups[0]
 

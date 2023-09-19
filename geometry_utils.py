@@ -53,7 +53,7 @@ def get_surface(curve, z):
 
 
 def get_num_points(curve, offset):
-    return int(rs.CurveLength(curve)/(offset/5))
+    return int(rs.CurveLength(curve)/(offset/4))
 
 
 def get_winding_order(curve, points, offset):
@@ -89,6 +89,33 @@ def closest_point(point, points):
             closest['point'] = p
     
     return closest['point'], closest['distance']
+
+
+def get_shortest_indices(start, end, points):
+    indices = []
+
+    indices1 = []
+    indices2 = []
+
+    if start > end:
+        indices1 = range(start, len(points)) + range(0, end+1)
+        indices2 = range(end, start-1, -1)
+    elif start < end:
+        indices1 = range(start, end+1)
+        indices2 = range(start, 0, -1) + range(len(points)-1, end-1, -1)
+
+    points1 = [points[x] for x in indices1]
+    points2 = [points[x] for x in indices2]
+
+    curve_length_1 = 0
+    if len(points1) > 0: curve_length_1 = rs.CurveLength(rs.AddCurve(points1))
+    curve_length_2 = 0
+    if len(points2) > 0: curve_length_2 = rs.CurveLength(rs.AddCurve(points2))
+
+    if curve_length_1 < curve_length_2: indices = indices1
+    else: indices = indices2
+
+    return indices
 
 
 def get_curves(shape, z):
