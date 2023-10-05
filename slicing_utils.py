@@ -713,7 +713,7 @@ def fill_curves_with_contours(t, curves, start_pnt=None, wall_mode=False, walls=
     return travel_paths
 
 
-def slice_fermat_fill(t, shape, start=0, end=None, wall_mode=False, walls=3, fill_bottom=False, bottom_layers=3, initial_offset=0.5):
+def slice_fermat_fill(t, shape, start_pnt=None, start=0, end=None, wall_mode=False, walls=3, fill_bottom=False, bottom_layers=3, initial_offset=0.5):
     travel_paths = []
     layers = int(math.floor(get_shape_height(shape) / t.get_layer_height())) + 1
 
@@ -725,18 +725,19 @@ def slice_fermat_fill(t, shape, start=0, end=None, wall_mode=False, walls=3, fil
         curve_groups = get_curves(shape, l*t.get_layer_height())
 
         for crvs in curve_groups:
+            if start_pnt == None: start_pnt = t.get_position()
             try:
                 if not wall_mode or (wall_mode and fill_bottom and l<bottom_layers):
-                    travel_paths = travel_paths + fill_curves_with_fermat_spiral(t, crvs, start_pnt=t.get_position(), initial_offset=initial_offset)
+                    travel_paths = travel_paths + fill_curves_with_fermat_spiral(t, crvs, start_pnt=start_pnt, initial_offset=initial_offset)
                 else:
-                    travel_paths = travel_paths + fill_curves_with_fermat_spiral(t, crvs, start_pnt=t.get_position(), wall_mode=wall_mode, walls=walls, initial_offset=initial_offset)
+                    travel_paths = travel_paths + fill_curves_with_fermat_spiral(t, crvs, start_pnt=start_pnt, wall_mode=wall_mode, walls=walls, initial_offset=initial_offset)
             except:
                 try:
                     print("Unable to fermat spiral layer, generating contours: "+str(l))
                     if not wall_mode or (wall_mode and fill_bottom and l<bottom_layers):
-                        travel_paths = travel_paths + fill_curves_with_contours(t, crvs, start_pnt=t.get_position(), initial_offset=initial_offset)
+                        travel_paths = travel_paths + fill_curves_with_contours(t, crvs, start_pnt=start_pnt, initial_offset=initial_offset)
                     else:
-                        travel_paths = travel_paths + fill_curves_with_contours(t, crvs, start_pnt=t.get_position(), wall_mode=wall_mode, walls=walls-1, initial_offset=initial_offset)
+                        travel_paths = travel_paths + fill_curves_with_contours(t, crvs, start_pnt=start_pnt, wall_mode=wall_mode, walls=walls-1, initial_offset=initial_offset)
                 except:
                     print("Error: unable to slice layer "+str(l))
 
@@ -805,6 +806,7 @@ def slice_vertical_and_fermat_fill(t, shape, wall_mode=False, walls=3, fill_bott
 
     return travel_paths, center_points
 
+
 def slice_2_half_D_fermat(t, curves, layers=3, wall_mode=False, walls=3, fill_bottom=False, bottom_layers=3, initial_offset=0.5):
     groups = get_curve_groupings(curves)
     group = groups[0]
@@ -851,49 +853,3 @@ def slice_2_half_D_fermat(t, curves, layers=3, wall_mode=False, walls=3, fill_bo
             t.set_position(p.X, p.Y, t.get_layer_height()*l)
 
     return travel_paths
-
-
-def two_wall_slice(t, shape, initial_offset=0.5):
-    layers = int(math.floor(get_shape_height(shape) / t.get_layer_height())) + 1
-    offset = float(t.get_extrude_width())
-    travel = []
-
-    for l in range(layers):
-        curves = get_curves(shape, l*t.get_layer_height())
-
-        for curve in curves:
-            # connect curves if given more than one
-            #curve = crvs[0]
-            #if len(crvs) > 1:
-                #curve = connect_curves(crvs, offset/8)
-
-            # first contour
-            first_contours = get_isocontour(curve, offset*initial_offset)
-            first_curve = None
-            if first_contours is not None:
-                first_curve = first_contours[0]
-                if len(first_contours) > 0:
-                    first_curve = sorted(first_contours, key=lambda x: get_area(x), reverse=True)[0]
-
-            # second contour
-            second_contours = get_isocontour(first_curve, offset)
-            second_curve = None
-            if second_contours is not None:
-                second_curve = second_contours[0]
-                if len(second_contours) > 0:
-                    second_curve = sorted(second_contours, key=lambda x: get_area(x), reverse=True)[0]
-
-            for crv in [first_curve, second_curve]:
-                if crv is not None and rs.IsCurve(crv):
-                    points = rs.DivideCurve(crv, int(rs.CurveLength(crv)/t.get_resolution()))
-                    if points is not None:
-                        start_idx, d = closest_point(t.get_position(), points)
-                        travel = travel + [rs.AddCurve([t.get_position(), points[start_idx]])]
-                        t.pen_up()
-                        t.set_position(points[start_idx].X, points[start_idx].Y, points[start_idx].Z)
-                        t.pen_down()
-                        for p in (range(start_idx+1, len(points)) + range(0, start_idx)):
-                            t.set_position(points[p].X, points[p].Y, points[p].Z)
-                        t.set_position(points[start_idx].X, points[start_idx].Y, points[start_idx].Z)
-
-    return travel

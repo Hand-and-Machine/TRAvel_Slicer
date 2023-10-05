@@ -11,7 +11,7 @@ class Graph:
         self.path_found = False
 
         self.path_check = None
-        self.min_weight = 1000000
+        self.min_weight = 10000
 
     def print_graph_data(self):
         print([node.name for node in self.nodes])
