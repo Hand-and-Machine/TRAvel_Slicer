@@ -117,18 +117,18 @@ def build_vertical_tree(t, shape):
     #bb = rs.BoundingBox(shape)
     #shape_center = rs.CreatePoint(bb)
 
+    center_point = rs.CreatePoint(0, 0, 0)
     center_points = []
     previous_nodes = [root]
     for l in range(layers + 1):
         curve_groups = get_curves(shape, l*t.get_layer_height())
 
-        center_point = rs.CreatePoint(0, 0, 0)
         outer_curves = []
         for crvs in curve_groups:
             outer_curve = sorted(crvs, key=lambda x: get_area(x), reverse=True)[0]
             center_point = rs.PointAdd(center_point, rs.CurveAreaCentroid(outer_curve)[0])
             outer_curves.append(outer_curve)
-        center_point = rs.CreatePoint(center_point.X/len(curve_groups), center_point.Y/len(curve_groups), center_point.Z/len(curve_groups))
+        center_point = rs.CreatePoint(center_point.X/(len(curve_groups) + 1), center_point.Y/(len(curve_groups) + 1), l*t.get_layer_height())
         center_points.append(center_point)
 
         new_nodes = []
@@ -137,8 +137,6 @@ def build_vertical_tree(t, shape):
             node.name = str(l) + str(c)
             node.depth = l
             node.height = l
-            pnts = rs.DivideCurve(outer_curves[c], 100)
-            node.start_point = pnts[closest_point(center_point, pnts)[0]]
             new_nodes.append(node)
             if root in previous_nodes:
                 node.parents.append(root)
@@ -150,6 +148,9 @@ def build_vertical_tree(t, shape):
                         prev_n.children.append(node)
             if len(node.parents) == 0: node.needs_support = True
             else: node.needs_support = False
+
+            pnts = rs.DivideCurve(outer_curves[c], 100)
+            node.start_point = pnts[closest_point(center_point, pnts)[0]]
 
         previous_nodes = new_nodes
 
