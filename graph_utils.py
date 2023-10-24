@@ -158,5 +158,4 @@ class NFA:
         if elem not in self.alphabet or start not in self.nodes:
             raise ValueError("Illegal transition")
         else:
-            print(start.data, elem, self.transitions[start][elem])
             return self.transitions[start][elem]

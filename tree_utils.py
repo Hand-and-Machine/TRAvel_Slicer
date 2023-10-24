@@ -1,11 +1,12 @@
 class Node:
     def __init__(self, data):
         self.data = data
+        self.name = None
         self.type = None
         self.depth = None
         self.height = None
+        self.parent = None
         self.overlap = []
-        self.parents = []
         self.children = []
         self.sub_nodes = []
         self.start_point = None
@@ -33,9 +34,8 @@ class Node:
         if self not in list: list.append(self)
         for child in self.children:
             child.get_all_nodes(list)
-        for parent in self.parents:
-            if parent not in list:
-                parent.get_all_ancestors(list)
+        if self.parent is not None and self.parent not in list:
+            self.parent.get_all_ancestors(list)
         return list
 
     def get_all_descendants(self, list):
@@ -46,6 +46,6 @@ class Node:
 
     def get_all_ancestors(self, list):
         if self not in list: list.append(self)
-        for parent in self.parents:
-            parent.get_all_ancestors(list)
+        if self.parent is not None:
+            self.parent.get_all_ancestors(list)
         return list

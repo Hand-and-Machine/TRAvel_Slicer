@@ -47,6 +47,8 @@ def best_vertical_path(t, shape):
     vert_tree, center_points = build_vertical_tree(t, shape)
     all_nodes = vert_tree.get_all_nodes([])
 
+    print("Size of grouped height tree: "+str(len(all_nodes)))
+
     path = []
     edges = []
     boundingBoxes = []
@@ -99,8 +101,39 @@ def best_vertical_path(t, shape):
         #height_graph.print_graph_data()
         height_graph.path_check = check_path
 
-        bbs = [rs.BoundingBox([sub.data for sub in node.data.sub_nodes]) for node in height_graph.nodes]
-        boundingBoxes = boundingBoxes + [rs.AddBox(bb) for bb in bbs]
+        bbs = [rs.BoundingBox([data for sub in node.data.sub_nodes for data in sub.data]) for node in height_graph.nodes]
+        for bb in bbs:
+            try: 
+                box = rs.AddBox(bb)
+                boundingBoxes.append(box)
+            except:
+                # this may be a single layer
+                try:
+                    z = None
+                    minX = None
+                    maxX = None
+                    minY = None
+                    maxY = None
+                    for pnt in bb:
+                        if minX == None or pnt.X < minX:
+                            minX = pnt.X
+                        if maxX == None or pnt.X > maxX:
+                            maxX = pnt.X
+                        if minY == None or pnt.Y < minY:
+                            minY = pnt.Y
+                        if maxY == None or pnt.Y > maxY:
+                            maxY = pnt.Y
+                        if z == None:
+                            z = pnt.Z
+                    points = [
+                        rs.AddPoint(minX, minY, z),
+                        rs.AddPoint(minX, maxY, z),
+                        rs.AddPoint(maxX, maxY, z),
+                        rs.AddPoint(maxX, minY, z)]
+                    srf = rs.AddSrfPt(points)
+                    boundingBoxes.append(srf)
+                except:
+                    print("Unable to create box from bounding box: ", bb)
 
         path = path + height_graph.get_shortest_hamiltonian_path()[0]
 
@@ -110,12 +143,10 @@ def best_vertical_path(t, shape):
 def build_vertical_tree(t, shape):
     start_time = time.time()
 
+    nozzle_width = 8
     layers = int(math.floor(get_shape_height(shape) / t.get_layer_height()))
     root = Node('root')
     root.name = 'root'
-
-    #bb = rs.BoundingBox(shape)
-    #shape_center = rs.CreatePoint(bb)
 
     center_point = rs.CreatePoint(0, 0, 0)
     center_points = []
@@ -131,30 +162,64 @@ def build_vertical_tree(t, shape):
         center_point = rs.CreatePoint(center_point.X/(len(curve_groups) + 1), center_point.Y/(len(curve_groups) + 1), l*t.get_layer_height())
         center_points.append(center_point)
 
+        # combine separated curves if their bounding boxes overlap by the nozzle_width
+        idx_groups = {c:[c] for c in range(len(outer_curves))}
+        for c1 in range(len(outer_curves)):
+            for c2 in range(c1+1, len(outer_curves)):
+                if xy_bbox_overlap(outer_curves[c1], outer_curves[c2], nozzle_width):
+                    print("Overlap between curves at layer: "+str(l))
+                    idx_groups[c1].append(c2)
+
+        # iterate through idx_groups
+        connection_found = True
+        while connection_found:
+            connection_found = False
+            for c1 in idx_groups.keys():
+                if idx_groups.get(c1):
+                    for c2 in idx_groups[c1]:
+                        if idx_groups.get(c2):
+                            if c2 != c1:
+                                connection_found = True
+                                for crv3 in idx_groups[c2]:
+                                    if crv3 not in idx_groups[c1]:
+                                        idx_groups[c1].append(crv3)
+                                idx_groups.pop(c2)
+
+        groups = []
+        outer_curve_groups = []
+        for i in idx_groups:
+            idxs = idx_groups[i]
+            groups.append([curve_groups[c] for c in idxs])
+            outer_curve_groups.append([outer_curves[c] for c in idxs])
+
         new_nodes = []
-        for c in range(len(curve_groups)):
-            node = Node(curve_groups[c])
+        for c in range(len(groups)):
+            node = Node(groups[c])
             node.name = str(l) + str(c)
             node.depth = l
             node.height = l
             new_nodes.append(node)
             if root in previous_nodes:
-                node.parents.append(root)
+                node.parent = root
                 root.children.append(node)
             else:
                 for prev_n in previous_nodes:
-                    if xy_bbox_overlap(prev_n.data, outer_curves[c]):
-                        node.parents.append(prev_n)
+                    if xy_bbox_overlap(prev_n.data, groups[c]):
+                        node.parent = prev_n
                         prev_n.children.append(node)
-            if len(node.parents) == 0: node.needs_support = True
+                        break
+            if node.parent == None: node.needs_support = True
             else: node.needs_support = False
 
-            pnts = rs.DivideCurve(outer_curves[c], 100)
+            # may need to address picking the first outer_curve
+            # in the group of outer_curves, if more than one
+            pnts = rs.DivideCurve(outer_curve_groups[c][0], 100)
             node.start_point = pnts[closest_point(center_point, pnts)[0]]
 
         previous_nodes = new_nodes
 
     print("Initial treeing time: "+str(time.time() - start_time)+" seconds")
+    print("Initial height tree size: "+str(len(root.get_all_nodes([]))))
 
     super_root = segment_tree_by_height(t, root, get_shape_height(shape))
     if len(super_root.get_all_nodes([])) > len(root.get_all_nodes([])):
@@ -174,7 +239,7 @@ def segment_tree_by_height(t, tree, total_height):
     idx = 0
     for child in tree.children:
         start_time = time.time()
-        group_by_height(child, super_root, limit, idx)
+        group_by_height(child, super_root, limit, idx=idx)
         print("Grouping initial child by height: "+str(time.time() - start_time)+" seconds")
         idx = idx + 1
 
@@ -189,7 +254,7 @@ def group_by_height(node, super_node, height, idx=0):
     elif node.height // height > super_node.height:
         new_super = Node(str(super_node.data)+'_'+str(idx))
         new_super.name = new_super.data
-        new_super.parents = [super_node]
+        new_super.parent = super_node
         new_super.depth = super_node.depth + 1
         new_super.height = node.depth // height
         new_super.sub_nodes.append(node)
@@ -205,7 +270,7 @@ def group_by_height(node, super_node, height, idx=0):
         for child in node.children:
             new_new_super = Node(str(s_node.data)+'_'+str(idx))
             new_new_super.name = new_new_super.data
-            new_new_super.parents = [s_node]
+            new_new_super.parent = s_node
             new_new_super.depth = s_node.depth + 1
             new_new_super.height = node.height // height
             s_node.children.append(new_new_super)
@@ -301,7 +366,7 @@ def subdivide_by_overlap(nodes, width):
                     current = dfa.transition(current, elem)
                     if current in dfa.final:
                         splits[node1].append(s1.height-1)
-                        print("Split!", splits)
+                        #print("Split!", splits)
 
     for node in splits:
         for split in splits[node]:
@@ -317,14 +382,13 @@ def split_super_node_at_height(node, height):
         split_node.depth = node.depth
         split_node.height = node.height
         split_node.children.append(node)
-        split_node.parents = [p for p in node.parents]
-        for p in split_node.parents:
-            p.children.append(split_node)
-            p.children.remove(node)
+        split_node.parent = node.parent
+        split_node.parent.children.append(split_node)
+        split_node.parent.children.remove(node)
         split_node.sub_nodes = subs1
 
         node.depth = node.depth + 1
-        node.parents = [split_node]
+        node.parent = split_node
         node.sub_nodes = subs2
 
         descendants = node.get_all_descendants([])
