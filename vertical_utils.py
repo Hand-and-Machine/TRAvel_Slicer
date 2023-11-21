@@ -472,8 +472,6 @@ def check_path(next_node, path):
     for sub in next_node.data.sub_nodes:
         for node in path:
             for sub2 in node.data.sub_nodes:
-                print(sub.data)
-                print(sub2.data)
-                if sub.height > sub2.height and curve_overlap_check(sub.data, sub2.data):
+                if sub.height > sub2.height and curve_overlap_check(sub.data, sub2.data, nozzle_width):
                     return False
     return True
