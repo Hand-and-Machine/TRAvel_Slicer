@@ -74,9 +74,9 @@ def best_vertical_path(t, shape):
             if node.sub_nodes[0].height <= min_height:
                 min_height = node.sub_nodes[0].height
 
-        for node in nodes_at_height:
-            if node.sub_nodes[0].height == min_height:
-                height_graph.starts.append(graph_node)
+        for node in height_graph.nodes:
+            if node.data.sub_nodes[0].height == min_height:
+                height_graph.starts.append(node)
 
         print("starts", [n.name for n in height_graph.starts])
 
@@ -106,11 +106,8 @@ def best_vertical_path(t, shape):
                     arrow = rs.AddCurve([graph_node.data.sub_nodes[-1].start_point, node2.sub_nodes[0].start_point])
                     edges.append(arrow)
 
-        num_edges = 0
-        for n in height_graph.edges:
-            num_edges = num_edges + len(height_graph.edges[n].keys())
         #height_graph.print_graph_data()
-        height_graph.path_check = check_path
+        #height_graph.path_check = check_path
 
         bbs = [rs.BoundingBox([data for sub in node.data.sub_nodes for data in sub.data]) for node in height_graph.nodes]
         for bb in bbs:
@@ -147,7 +144,7 @@ def best_vertical_path(t, shape):
                     print("Unable to create box from bounding box: ", bb)
 
         path_section = height_graph.get_shortest_hamiltonian_path()[0]
-        print(path_section)
+        print('shortest hamiltonian', path_section)
         path = path + path_section
 
     print("Graph construction time: "+str(time.time() - st_time))
