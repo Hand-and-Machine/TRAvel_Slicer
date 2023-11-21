@@ -557,7 +557,9 @@ def connect_curves(curves, offset):
         pnt2_1 = ends2[0][0]
         pnt2_2 = ends2[1][0]
 
-        if rs.CurveCurveIntersection(rs.AddCurve([pnt1_1, pnt2_1]), rs.AddCurve([pnt1_2, pnt2_2]))[0] == 0:
+        intersect = rs.PlanarClosedCurveContainment(rs.AddCurve([pnt1_1, pnt2_1]), rs.AddCurve([pnt1_2, pnt2_2]))
+
+        if intersect == 0:
             all_curves.append(rs.AddCurve([pnt1_1, pnt2_1]))
             all_curves.append(rs.AddCurve([pnt1_2, pnt2_2]))
         else:
@@ -634,7 +636,7 @@ def fill_curves_with_fermat_spiral(t, curves, start_pnt=None, wall_mode=False, w
     for p in final_spiral:
         t.set_position(p.X, p.Y, p.Z)
 
-    return travel_paths
+    return final_spiral, travel_paths
 
 
 def fill_curves_with_spiral(t, curves, start_pnt=None):
@@ -728,16 +730,16 @@ def slice_fermat_fill(t, shape, start_pnt=None, start=0, end=None, wall_mode=Fal
             if start_pnt == None: start_pnt = t.get_position()
             try:
                 if not wall_mode or (wall_mode and fill_bottom and l<bottom_layers):
-                    travel_paths = travel_paths + fill_curves_with_fermat_spiral(t, crvs, start_pnt=start_pnt, initial_offset=initial_offset)
+                    travel_paths = travel_paths + fill_curves_with_fermat_spiral(t, crvs, start_pnt=start_pnt, initial_offset=initial_offset)[0]
                 else:
-                    travel_paths = travel_paths + fill_curves_with_fermat_spiral(t, crvs, start_pnt=start_pnt, wall_mode=wall_mode, walls=walls, initial_offset=initial_offset)
+                    travel_paths = travel_paths + fill_curves_with_fermat_spiral(t, crvs, start_pnt=start_pnt, wall_mode=wall_mode, walls=walls, initial_offset=initial_offset)[0]
             except:
                 try:
                     print("Unable to fermat spiral layer, generating contours: "+str(l))
                     if not wall_mode or (wall_mode and fill_bottom and l<bottom_layers):
-                        travel_paths = travel_paths + fill_curves_with_contours(t, crvs, start_pnt=start_pnt, initial_offset=initial_offset)
+                        travel_paths = travel_paths + fill_curves_with_contours(t, crvs, start_pnt=start_pnt, initial_offset=initial_offset)[0]
                     else:
-                        travel_paths = travel_paths + fill_curves_with_contours(t, crvs, start_pnt=start_pnt, wall_mode=wall_mode, walls=walls-1, initial_offset=initial_offset)
+                        travel_paths = travel_paths + fill_curves_with_contours(t, crvs, start_pnt=start_pnt, wall_mode=wall_mode, walls=walls-1, initial_offset=initial_offset)[0]
                 except:
                     print("Error: unable to slice layer "+str(l))
 

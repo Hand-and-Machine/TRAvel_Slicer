@@ -7,6 +7,12 @@ def get_area(curve):
     except:
         return 0
 
+def get_area_center(curve):
+    try:
+        return rs.CurveAreaCentroid(curve)[0]
+    except:
+        return rs.AddPoint(0, 0, 0)
+
 def get_size(shape):
     # bounding box of shape
     bb = rs.BoundingBox(shape)
@@ -54,7 +60,7 @@ def get_surface(curve, z):
 
 
 def get_num_points(curve, offset):
-    return int(rs.CurveLength(curve)/(offset/4))
+    return int(rs.CurveLength(curve)/(float(offset)/4))
 
 
 def get_winding_order(curve, points, offset):
@@ -122,7 +128,7 @@ def get_shortest_indices(start, end, points):
 def get_curves(shape, z):
     plane = get_plane(z)
     curves = rs.AddSrfContourCrvs(shape, plane)
-    curves = [curve for curve in curves if curve is not None and rs.IsCurve(curve)]
+    curves = [curve for curve in curves if curve is not None and rs.IsCurve(curve) and rs.IsCurveClosed(curve)]
     try:
         curve_groups = get_curve_groupings(curves)
         return curve_groups
@@ -135,7 +141,7 @@ def get_curve_groupings(curves):
     # curves can represent the inside of a surface or potentially
     # a nested curve within another set of curves defining a surface
     all_points = [rs.DivideCurve(curve, 100) for curve in curves]
-    inside = {c:{c2:all([rs.PointInPlanarClosedCurve(p, curves[c2]) for p in all_points[c]]) for c2 in range(len(curves)) if c2 != c} for c in range(len(curves))}
+    inside = {c:{c2:rs.PlanarClosedCurveContainment(curves[c], curves[c2])==3 for c2 in range(len(curves)) if c2 != c} for c in range(len(curves))}
     outer_curves = [c for c in range(len(curves)) if not any([inside[c][k] for k in inside[c]])]
     inner_curves = [c for c in range(len(curves)) if c not in outer_curves]
 
