@@ -97,14 +97,14 @@ def best_vertical_path(t, shape):
             siblings_and_counsins = [n for n in nodes_at_height if n not in direct_relations]
             for node2 in siblings_and_counsins:
                 # do not add edge if node2 overlaps node1
-                if not check_path(height_graph.get_node(node2), [graph_node]):
-                    # compute travel between curves, where weight is set as
-                    # distance between center of start and end curves within node
-                    weight = rs.Distance(node1.sub_nodes[-1].start_point, node2.sub_nodes[0].start_point)
-                    height_graph.add_edge(Graph_Edge(graph_node, height_graph.get_node(node2), weight))
+                #if not check_path(height_graph.get_node(node2), [graph_node]):
+                # compute travel between curves, where weight is set as
+                # distance between center of start and end curves within node
+                weight = rs.Distance(node1.sub_nodes[-1].start_point, node2.sub_nodes[0].start_point)
+                height_graph.add_edge(Graph_Edge(graph_node, height_graph.get_node(node2), weight))
 
-                    arrow = rs.AddCurve([graph_node.data.sub_nodes[-1].start_point, node2.sub_nodes[0].start_point])
-                    edges.append(arrow)
+                arrow = rs.AddCurve([graph_node.data.sub_nodes[-1].start_point, node2.sub_nodes[0].start_point])
+                edges.append(arrow)
 
         height_graph.print_graph_data()
         height_graph.path_check = check_path
@@ -165,7 +165,6 @@ def build_vertical_tree(t, shape):
     center_points = []
     previous_nodes = [root]
     for l in range(layers + 1):
-        print('Layer '+str(l))
         curve_groups = get_curves(shape, l*t.get_layer_height())
 
         outer_curves = []
@@ -474,6 +473,6 @@ def check_layers(node1, node2):
     nozzle_width = 8 #max diameter of the nozzle in mm
     for sub in node1.data.sub_nodes:
             for sub2 in node2.data.sub_nodes:
-                if sub.height > sub2.height and curve_overlap_check(sub.data, sub2.data, nozzle_width):
+                if sub2.height > sub.height and curve_overlap_check(sub.data, sub2.data, nozzle_width):
                     return False
     return True
