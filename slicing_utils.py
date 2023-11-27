@@ -631,6 +631,7 @@ def fill_curves_with_fermat_spiral(t, curves, start_pnt=None, wall_mode=False, w
    #print(len(final_points), len(final_spiral))
     t.pen_up()
     travel_paths.append(rs.AddCurve([t.get_position(), final_spiral[0]]))
+    t.set_position(final_spiral[0].X, final_spiral[0].Y, t.get_position().Z)
     t.set_position(final_spiral[0].X, final_spiral[0].Y, final_spiral[0].Z)
     t.pen_down()
     for p in final_spiral:
@@ -674,6 +675,7 @@ def fill_curves_with_spiral(t, curves, start_pnt=None):
                 points = rs.DivideCurve(node["curves"][0], num_pnts)
                 t.pen_up()
                 travel_paths.append(rs.AddCurve([t.get_position(), spiral[0]]))
+                t.set_position(points[0].X, points[0].Y, t.get_position().Z)
                 t.set_position(points[0].X, points[0].Y, points[0].Z)
                 t.pen_down()
                 for p in points:
@@ -705,6 +707,7 @@ def fill_curves_with_contours(t, curves, start_pnt=None, wall_mode=False, walls=
 
         travel_paths = travel_paths + [rs.AddCurve([t.get_position(), points[start_idx]])]
         t.pen_up()
+        t.set_position(points[start_idx].X, points[start_idx].Y, t.get_position().Z)
         t.set_position(points[start_idx].X, points[start_idx].Y, points[start_idx].Z)
         t.pen_down()
 
@@ -789,7 +792,7 @@ def slice_vertical_and_fermat_fill(t, shape, wall_mode=False, walls=3, fill_bott
     travel_paths = []
     center_points = []
     try:
-        tree, path, center_points = best_vertical_path(t, shape)
+        tree, path, center_points, bboxes, edges = best_vertical_path(t, shape)
 
         for sup_node in path:
             for node in sup_node.data.sub_nodes:
@@ -800,8 +803,8 @@ def slice_vertical_and_fermat_fill(t, shape, wall_mode=False, walls=3, fill_bott
                         travel_paths = travel_paths + fill_curves_with_fermat_spiral(t, node.data, start_pnt=node.start_point, wall_mode=wall_mode, walls=walls)
                 except:
                     print("Failed to print layer "+str(node.height))
-    except:
-        print("Failed to find vertical travel path minimization, printing layer by layer.")
+    except Exception as error:
+        print("Failed to find vertical travel path minimization, printing layer by layer. "+str(error))
         travel_paths = travel_paths + slice_fermat_fill(t, shape, wall_mode=wall_mode, walls=walls, fill_bottom=fill_bottom, bottom_layers=bottom_layers)
 
     print("Full path generation: "+str(time.time()-overall_start_time)+" seconds")

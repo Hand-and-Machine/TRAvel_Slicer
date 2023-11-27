@@ -42,6 +42,7 @@ class Graph:
         self.count = 0
         paths = self.get_all_hamiltonian_paths(True)
         if len(paths) == 0:
+            #raise ValueError("Unable to find a hamiltonian path in graph")
             print("Unable to find a hamiltonian path in graph")
             return [[]]
         return sorted(paths, key=lambda path: path[1])[0]

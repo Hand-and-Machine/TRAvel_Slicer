@@ -125,10 +125,27 @@ def get_shortest_indices(start, end, points):
     return indices
 
 
-def get_curves(shape, z):
+def get_curves(shape, z, retry=True):
     plane = get_plane(z)
-    curves = rs.AddSrfContourCrvs(shape, plane)
-    curves = [curve for curve in curves if curve is not None and rs.IsCurve(curve) and rs.IsCurveClosed(curve)]
+    initial_curves = rs.AddSrfContourCrvs(shape, plane)
+
+    curves = []
+    for curve in initial_curves:
+        if curve is not None:
+            if not rs.IsCurve(curve):
+                print("Slice: contour is not curve", curve)
+            elif not rs.IsCurveClosed(curve):
+                if rs.IsCurveClosable(curve):
+                    curves.append(rs.CloseCurve(curve))
+                else:
+                    print("Slice: curve is not closed and is not closable", curve)
+            else:
+                curves.append(curve)
+
+    if initial_curves > 0 and len(curves) == 0 and retry:
+        print("Slicing shape at height "+str(z)+" was unsuccessful. Retrying.")
+        return get_curves(shape, z+0.01, False)
+
     try:
         curve_groups = get_curve_groupings(curves)
         return curve_groups

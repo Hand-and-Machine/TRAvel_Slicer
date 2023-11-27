@@ -96,8 +96,8 @@ def best_vertical_path(t, shape):
             direct_relations = node1.get_all_descendants([]) + node1.get_all_ancestors([])
             siblings_and_counsins = [n for n in nodes_at_height if n not in direct_relations]
             for node2 in siblings_and_counsins:
-                # do not add edge if there is overlap
-                if not is_overlapping(node1, node2, nozzle_width):
+                # do not add edge if node2 overlaps node1
+                if not check_path(height_graph.get_node(node2), [graph_node]):
                     # compute travel between curves, where weight is set as
                     # distance between center of start and end curves within node
                     weight = rs.Distance(node1.sub_nodes[-1].start_point, node2.sub_nodes[0].start_point)
@@ -106,8 +106,8 @@ def best_vertical_path(t, shape):
                     arrow = rs.AddCurve([graph_node.data.sub_nodes[-1].start_point, node2.sub_nodes[0].start_point])
                     edges.append(arrow)
 
-        #height_graph.print_graph_data()
-        #height_graph.path_check = check_path
+        height_graph.print_graph_data()
+        height_graph.path_check = check_path
 
         bbs = [rs.BoundingBox([data for sub in node.data.sub_nodes for data in sub.data]) for node in height_graph.nodes]
         for bb in bbs:
@@ -144,7 +144,6 @@ def best_vertical_path(t, shape):
                     print("Unable to create box from bounding box: ", bb)
 
         path_section = height_graph.get_shortest_hamiltonian_path()[0]
-        print('shortest hamiltonian', path_section)
         path = path + path_section
 
     print("Graph construction time: "+str(time.time() - st_time))
@@ -160,10 +159,13 @@ def build_vertical_tree(t, shape):
     root = Node('root')
     root.name = 'root'
 
+    print('Number of layers:'+str(layers))
+
     center_point = rs.CreatePoint(0, 0, 0)
     center_points = []
     previous_nodes = [root]
     for l in range(layers + 1):
+        print('Layer '+str(l))
         curve_groups = get_curves(shape, l*t.get_layer_height())
 
         outer_curves = []
@@ -224,22 +226,21 @@ def build_vertical_tree(t, shape):
                 node.parent = root
                 root.children.append(node)
             else:
-                parent_found = False
                 for prev_n in previous_nodes:
-                    if parent_found: break
                     curves1 = union_curves_on_xy_plane([crv for g in prev_n.data for crv in g])
                     curves2 = union_curves_on_xy_plane([crv for g in groups[c] for crv in g])
                     for curve1 in curves1:
-                        if node in prev_n.children: break
                         for curve2 in curves2:
-                            if (curve1 and rs.IsCurve(curve1) and rs.IsCurveClosed(curve1)
+                            #print(rs.PlanarClosedCurveContainment(curve1, curve2, tolerance=nozzle_width/2), curve1 and rs.IsCurve(curve1) and rs.IsCurveClosed(curve1), curve2 and rs.IsCurve(curve2) and rs.IsCurveClosed(curve2), prev_n)
+                            if not node.parent and (curve1 and rs.IsCurve(curve1) and rs.IsCurveClosed(curve1)
                                 and curve2 and rs.IsCurve(curve2) and rs.IsCurveClosed(curve2)
                                 and rs.PlanarClosedCurveContainment(curve1, curve2, tolerance=nozzle_width/2) > 0):
                                 node.parent = prev_n
                                 prev_n.children.append(node)
-                                parent_found = True
-                                break
-            if node.parent == None: node.needs_support = True
+
+            if node.parent == None:
+                print('No parent found')
+                node.needs_support = True
             else: node.needs_support = False
 
             # may need to address picking the first outer_curve
@@ -439,12 +440,6 @@ def union_curves_on_xy_plane(curves):
         raise ValueError("Called union_curves_on_xy_plane with no curves")
 
 
-def is_overlapping(node1, node2, width=0):
-    curves1 = union_curves_on_xy_plane([curve for sub1 in node1.sub_nodes for group in sub1.data for curve in group])
-    curves2 = union_curves_on_xy_plane([curve for sub2 in node2.sub_nodes for group in sub2.data for curve in group])
-    return curve_overlap_check(curves1, curves2, width)
-
-
 def curve_overlap_check(curves1, curves2, width=0):
     for curve1 in curves1:
         for curve2 in curves2:
@@ -465,10 +460,20 @@ def curve_overlap_check(curves1, curves2, width=0):
 
 
 def check_path(next_node, path):
+    for node in path:
+        if overlap.get(next_node) != None and overlap.get(next_node).get(node) != None:
+            if not overlap.get(next_node).get(node):
+                return False
+        else:
+            if overlap.get(next_node) == None: overlap[next_node] = {}
+            overlap.get(next_node)[node] = check_layers(next_node, node)
+    return True
+
+
+def check_layers(node1, node2):
     nozzle_width = 8 #max diameter of the nozzle in mm
-    for sub in next_node.data.sub_nodes:
-        for node in path:
-            for sub2 in node.data.sub_nodes:
+    for sub in node1.data.sub_nodes:
+            for sub2 in node2.data.sub_nodes:
                 if sub.height > sub2.height and curve_overlap_check(sub.data, sub2.data, nozzle_width):
                     return False
     return True

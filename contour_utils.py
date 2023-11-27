@@ -17,7 +17,7 @@ def get_contours(t, curve, walls=3, wall_mode=False, initial_offset=0.5):
 
 
 def get_isocontours(t, curve, parent, recursion=0, wall_mode=False, walls=3):
-    if recursion > 12:
+    if recursion > 30:
         print("Recursion exceeded limit")
         return []
     new_curves = get_isocontour(curve, float(t.get_extrude_width()))
