@@ -637,7 +637,7 @@ def fill_curves_with_fermat_spiral(t, curves, start_pnt=None, wall_mode=False, w
     for p in final_spiral:
         t.set_position(p.X, p.Y, p.Z)
 
-    return final_spiral, travel_paths
+    return travel_paths, final_spiral
 
 
 def fill_curves_with_spiral(t, curves, start_pnt=None):
@@ -796,20 +796,22 @@ def slice_vertical_and_fermat_fill(t, shape, wall_mode=False, walls=3, fill_bott
 
         for sup_node in path:
             for node in sup_node.data.sub_nodes:
-                try:
-                    if not wall_mode or (wall_mode and fill_bottom and node.height<bottom_layers):
-                        travel_paths = travel_paths + fill_curves_with_fermat_spiral(t, node.data, start_pnt=node.start_point)
-                    else:
-                        travel_paths = travel_paths + fill_curves_with_fermat_spiral(t, node.data, start_pnt=node.start_point, wall_mode=wall_mode, walls=walls)
-                except:
-                    print("Failed to print layer "+str(node.height))
+                print(node.data)
+                for curves in node.data:
+                    try:
+                        if not wall_mode or (wall_mode and fill_bottom and node.height<bottom_layers):
+                            travel_paths = travel_paths + fill_curves_with_fermat_spiral(t, curves, start_pnt=node.start_point)[0]
+                        else:
+                            travel_paths = travel_paths + fill_curves_with_fermat_spiral(t, curves, start_pnt=node.start_point, wall_mode=wall_mode, walls=walls)[0]
+                    except Exception as err:
+                        print("Failed to print layer "+str(node.height), err)
     except Exception as error:
         print("Failed to find vertical travel path minimization, printing layer by layer. "+str(error))
         travel_paths = travel_paths + slice_fermat_fill(t, shape, wall_mode=wall_mode, walls=walls, fill_bottom=fill_bottom, bottom_layers=bottom_layers)
 
     print("Full path generation: "+str(time.time()-overall_start_time)+" seconds")
 
-    return travel_paths, center_points
+    return travel_paths, tree, path, center_points, bboxes, edges
 
 
 def slice_2_half_D_fermat(t, curves, layers=3, wall_mode=False, walls=3, fill_bottom=False, bottom_layers=3, initial_offset=0.5):

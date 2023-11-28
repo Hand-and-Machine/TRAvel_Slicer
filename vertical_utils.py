@@ -230,7 +230,6 @@ def build_vertical_tree(t, shape):
                     curves2 = union_curves_on_xy_plane([crv for g in groups[c] for crv in g])
                     for curve1 in curves1:
                         for curve2 in curves2:
-                            #print(rs.PlanarClosedCurveContainment(curve1, curve2, tolerance=nozzle_width/2), curve1 and rs.IsCurve(curve1) and rs.IsCurveClosed(curve1), curve2 and rs.IsCurve(curve2) and rs.IsCurveClosed(curve2), prev_n)
                             if not node.parent and (curve1 and rs.IsCurve(curve1) and rs.IsCurveClosed(curve1)
                                 and curve2 and rs.IsCurve(curve2) and rs.IsCurveClosed(curve2)
                                 and rs.PlanarClosedCurveContainment(curve1, curve2, tolerance=nozzle_width/2) > 0):
@@ -400,7 +399,6 @@ def subdivide_by_overlap(nodes, width):
                     current = dfa.transition(current, elem)
                     if current in dfa.final:
                         splits[node1].append(s1.height-1)
-                        #print("Split!", splits)
 
     for node in splits:
         for split in splits[node]:
