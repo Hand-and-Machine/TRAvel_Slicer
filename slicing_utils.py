@@ -636,6 +636,7 @@ def fill_curves_with_fermat_spiral(t, curves, start_pnt=None, wall_mode=False, w
     t.pen_down()
     for p in final_spiral:
         t.set_position(p.X, p.Y, p.Z)
+    t.set_position(final_spiral[0].X, final_spiral[0].Y, final_spiral[0].Z)
 
     return travel_paths, final_spiral
 
@@ -794,15 +795,18 @@ def slice_vertical_and_fermat_fill(t, shape, wall_mode=False, walls=3, fill_bott
     try:
         tree, path, center_points, bboxes, edges = best_vertical_path(t, shape)
 
+        start_point = path[0].data.sub_nodes[0].start_point
         for sup_node in path:
             for node in sup_node.data.sub_nodes:
-                print(node.data)
+                #if node == sup_node.data.sub_nodes[0]: start_point = node.start_point
+                #else: start_point = t.get_position()
+                start_point = t.get_position()
                 for curves in node.data:
                     try:
                         if not wall_mode or (wall_mode and fill_bottom and node.height<bottom_layers):
-                            travel_paths = travel_paths + fill_curves_with_fermat_spiral(t, curves, start_pnt=node.start_point)[0]
+                            travel_paths = travel_paths + fill_curves_with_fermat_spiral(t, curves, start_pnt=start_point)[0]
                         else:
-                            travel_paths = travel_paths + fill_curves_with_fermat_spiral(t, curves, start_pnt=node.start_point, wall_mode=wall_mode, walls=walls)[0]
+                            travel_paths = travel_paths + fill_curves_with_fermat_spiral(t, curves, start_pnt=start_point, wall_mode=wall_mode, walls=walls)[0]
                     except Exception as err:
                         print("Failed to print layer "+str(node.height), err)
     except Exception as error:

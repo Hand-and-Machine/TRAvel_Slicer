@@ -74,11 +74,16 @@ def best_vertical_path(t, shape):
             if node.sub_nodes[0].height <= min_height:
                 min_height = node.sub_nodes[0].height
 
+        prev_node = None
+        if len(path)>0: prev_node = path[-1]
         for node in height_graph.nodes:
             if node.data.sub_nodes[0].height == min_height:
-                height_graph.starts.append(node)
+                weight = 0
+                if prev_node!=None:
+                    weight = rs.Distance(prev_node.data.sub_nodes[-1].start_point, node.data.sub_nodes[0].start_point)
+                height_graph.starts.append((node, weight))
 
-        print("starts", [n.name for n in height_graph.starts])
+        print("starts", [(n[0].name, n[1]) for n in height_graph.starts])
 
         # add edges to graph
         # edges related to height dependency

@@ -49,11 +49,11 @@ class Graph:
 
     def get_all_hamiltonian_paths(self, shortest=False):
         paths = []
-        for start in self.starts:
+        for start, weight in self.starts:
             if start not in self.nodes:
                 raise ValueError("Node not in graph")
             else:
-                self.get_hamiltonian_paths(([start], 0), paths, shortest)
+                self.get_hamiltonian_paths(([start], weight), paths, shortest)
         
         return paths
 
