@@ -111,7 +111,7 @@ def best_vertical_path(t, shape):
                 arrow = rs.AddCurve([graph_node.data.sub_nodes[-1].start_point, node2.sub_nodes[0].start_point])
                 edges.append(arrow)
 
-        height_graph.print_graph_data()
+        #height_graph.print_graph_data()
         height_graph.path_check = check_path
 
         bbs = [rs.BoundingBox([data for sub in node.data.sub_nodes for data in sub.data]) for node in height_graph.nodes]
@@ -148,8 +148,10 @@ def best_vertical_path(t, shape):
                 except:
                     print("Unable to create box from bounding box: ", bb)
 
+        start_time = time.time()
         path_section = height_graph.get_shortest_hamiltonian_path()[0]
         path = path + path_section
+        print("Hamiltonian Path Search Time: "+str(time.time() - start_time))
 
     print("Graph construction time: "+str(time.time() - st_time))
 
@@ -191,7 +193,7 @@ def build_vertical_tree(t, shape):
                     if overlap_found: break
                     for curve2 in curves2:
                         if rs.PlanarClosedCurveContainment(curve1, curve2, tolerance=nozzle_width/2) > 0:
-                            print("Overlap between curves at layer: "+str(l))
+                            print("Overlap between curves at layer: "+str(l), len(curve_groups))
                             idx_groups[c1].append(c2)
                             overlap_found = True
                             break
@@ -290,16 +292,20 @@ def group_by_height(node, super_node, height, idx=0):
     if node.height // height == super_node.height:
         super_node.sub_nodes.append(node)
     elif node.height // height > super_node.height:
-        new_super = Node(str(super_node.data)+'_'+str(idx))
-        new_super.name = new_super.data
-        new_super.parent = super_node
-        new_super.depth = super_node.depth + 1
-        new_super.height = node.depth // height
-        new_super.sub_nodes.append(node)
+        if len(super_node.sub_nodes) > 0:
+            new_super = Node(str(super_node.data)+'_'+str(idx))
+            new_super.name = new_super.data
+            new_super.parent = super_node
+            new_super.depth = super_node.depth + 1
+            new_super.height = node.depth // height
+            new_super.sub_nodes.append(node)
 
-        super_node.children.append(new_super)
+            super_node.children.append(new_super)
 
-        s_node = new_super
+            s_node = new_super
+        else:
+            super_node.sub_nodes.append(node)
+            super_node.height = node.depth // height
     elif node.height // height < super_node.height:
         raise ValueError("Error, node should not be below current super_node")
 
@@ -431,6 +437,7 @@ def split_super_node_at_height(node, height):
         descendants = node.get_all_descendants([])
         for d in descendants:
             d.depth = d.depth + 1
+    else: print("Split called on node that divides poorly")
 
 
 def union_curves_on_xy_plane(curves):

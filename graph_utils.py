@@ -2,10 +2,11 @@ class Graph:
     def __init__(self):
         self.nodes = []
         self.edges = {}
+        self.edge_keys = {}
         self.starts = []
 
         self.count = 0
-        self.count_limit = 1000
+        self.count_limit = 100000
 
         self.path = None
         self.path_found = False
@@ -23,6 +24,7 @@ class Graph:
         else:
             self.nodes.append(node)
             self.edges[node] = {}
+            self.edge_keys[node] = []
             self.min_weight = 1000000
 
     def add_edge(self, edge):
@@ -33,6 +35,8 @@ class Graph:
         elif edge.end not in self.edges[edge.start]:
             self.edges[edge.start][edge.end] = edge.weight
             self.min_weight = max(1000000, edge.weight*100)
+            self.edge_keys[edge.start].append(edge.end)
+            self.edge_keys[edge.start] = sorted(self.edge_keys[edge.start], key=lambda x:self.edges[edge.start][x])
 
     def get_node(self, data):
         for node in self.nodes:
@@ -65,9 +69,11 @@ class Graph:
         if all([node in path[0] for node in self.nodes]):
             if path[1] < self.min_weight: self.min_weight = path[1]
             paths.append(path)
+            print("Hamiltonian path found")
             return paths
 
-        for end in sorted(self.edges[path[0][-1]].keys(), key=lambda x:self.edges[path[0][-1]][x]):
+        for end in self.edge_keys[path[0][-1]]:
+#        for end in self.edges[path[0][-1]].keys():
             weight = path[1]+self.edges[path[0][-1]][end]
             # check that we have not already been to this graph node
             if end not in path[0]:
