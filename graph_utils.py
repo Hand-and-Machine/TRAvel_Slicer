@@ -6,7 +6,7 @@ class Graph:
         self.starts = []
 
         self.count = 0
-        self.count_limit = 100000
+        self.count_limit = 10000
 
         self.path = None
         self.path_found = False
@@ -65,6 +65,8 @@ class Graph:
         self.count = self.count + 1
         if self.count > self.count_limit:
             raise ValueError("Exceeded search limit")
+            #print("Exceeded search limit")
+            #return paths
 
         if all([node in path[0] for node in self.nodes]):
             if path[1] < self.min_weight: self.min_weight = path[1]

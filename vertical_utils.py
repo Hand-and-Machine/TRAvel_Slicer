@@ -62,6 +62,8 @@ def best_vertical_path(t, shape):
     for h in range(int(math.floor(height / nozzle_height))+1):
         nodes_at_height = [node for node in all_nodes if node.height == h]
 
+        print("Nodes at height "+str(h)+": "+str(len(nodes_at_height)))
+
         # create a graph for this height chunk
         height_graph = Graph()
         min_height = 1000000000
@@ -193,7 +195,7 @@ def build_vertical_tree(t, shape):
                     if overlap_found: break
                     for curve2 in curves2:
                         if rs.PlanarClosedCurveContainment(curve1, curve2, tolerance=nozzle_width/2) > 0:
-                            print("Overlap between curves at layer: "+str(l), len(curve_groups))
+                            #print("Overlap between curves at layer: "+str(l), len(curve_groups))
                             idx_groups[c1].append(c2)
                             overlap_found = True
                             break
@@ -470,12 +472,11 @@ def curve_overlap_check(curves1, curves2, width=0):
 
 def check_path(next_node, path):
     for node in path:
-        if overlap.get(next_node) != None and overlap.get(next_node).get(node) != None:
-            if not overlap.get(next_node).get(node):
-                return False
-        else:
+        if overlap.get(next_node) == None or overlap.get(next_node).get(node) == None:
             if overlap.get(next_node) == None: overlap[next_node] = {}
             overlap.get(next_node)[node] = check_layers(next_node, node)
+        if not overlap.get(next_node)[node]:
+            return False
     return True
 
 
