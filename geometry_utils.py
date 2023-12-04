@@ -126,7 +126,7 @@ def get_shortest_indices(start, end, points):
 
 
 def get_curves(shape, z, retry=True):
-    plane = get_plane(z)
+    plane = get_plane(float(z))
     initial_curves = rs.AddSrfContourCrvs(shape, plane)
 
     curves = []
@@ -144,12 +144,13 @@ def get_curves(shape, z, retry=True):
 
     if initial_curves > 0 and len(curves) == 0 and retry:
         print("Slicing shape at height "+str(z)+" was unsuccessful. Retrying.")
-        return get_curves(shape, z+0.01, False)
+        return get_curves(shape, float(z)+0.01, False)
 
     try:
         curve_groups = get_curve_groupings(curves)
         return curve_groups
-    except:
+    except Exception as err:
+        print("Could not group curves", err)
         return [curves]
 
 
@@ -157,7 +158,6 @@ def get_curve_groupings(curves):
     # find curve groupings from intersection of shape with plane
     # curves can represent the inside of a surface or potentially
     # a nested curve within another set of curves defining a surface
-    all_points = [rs.DivideCurve(curve, 100) for curve in curves]
     inside = {c:{c2:rs.PlanarClosedCurveContainment(curves[c], curves[c2])==3 for c2 in range(len(curves)) if c2 != c} for c in range(len(curves))}
     outer_curves = [c for c in range(len(curves)) if not any([inside[c][k] for k in inside[c]])]
     inner_curves = [c for c in range(len(curves)) if c not in outer_curves]

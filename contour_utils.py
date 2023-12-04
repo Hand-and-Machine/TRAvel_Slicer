@@ -2,16 +2,24 @@ import geometry_utils
 from geometry_utils import *
 
 def get_contours(t, curve, walls=3, wall_mode=False, initial_offset=0.5):
-    first_contours = get_isocontour(curve, float(t.get_extrude_width())*initial_offset)
-    first_curve = first_contours[0]
-    if len(first_contours) > 0:
-        first_curve = sorted(first_contours, key=lambda x: get_area(x), reverse=True)[0]
+    if initial_offset > 0:
+        first_contours = get_isocontour(curve, float(t.get_extrude_width())*initial_offset)
+    else:
+        first_contours = [curve]
 
-    root = {"guid": first_curve, "depth": 0, "children":[]}
-    isocontours = [] + [first_curve]
-    new_curves = get_isocontours(t, first_curve, root, wall_mode=wall_mode, walls=walls)
-    if new_curves:
-        isocontours = isocontours + new_curves
+    if first_contours != None:
+        first_curve = first_contours[0]
+        if len(first_contours) > 0:
+            first_curve = sorted(first_contours, key=lambda x: get_area(x), reverse=True)[0]
+
+        root = {"guid": first_curve, "depth": 0, "children":[]}
+        isocontours = [] + [first_curve]
+        new_curves = get_isocontours(t, first_curve, root, wall_mode=wall_mode, walls=walls)
+        if new_curves:
+            isocontours = isocontours + new_curves
+    else:
+        isocontours = [curve]
+        root = {"guid": curve, "depth": 0, "children":[]}
     
     return root, isocontours
 

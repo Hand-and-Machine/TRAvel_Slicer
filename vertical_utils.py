@@ -61,8 +61,8 @@ def best_vertical_path(t, shape):
     height = get_shape_height(shape)
     for h in range(int(math.floor(height / nozzle_height))+1):
         nodes_at_height = [node for node in all_nodes if node.height == h]
-
         print("Nodes at height "+str(h)+": "+str(len(nodes_at_height)))
+        if len(nodes_at_height) == 0: break
 
         # create a graph for this height chunk
         height_graph = Graph()
@@ -153,9 +153,9 @@ def best_vertical_path(t, shape):
         start_time = time.time()
         path_section = height_graph.get_shortest_hamiltonian_path()[0]
         path = path + path_section
-        print("Hamiltonian Path Search Time: "+str(time.time() - start_time))
+        print("Hamiltonian Path Search Time: "+str(time.time() - start_time)+" seconds")
 
-    print("Graph construction time: "+str(time.time() - st_time))
+    print("Graph construction time: "+str(time.time() - st_time)+" seconds")
 
     return vert_tree, path, center_points, boundingBoxes, edges
 
@@ -443,12 +443,18 @@ def split_super_node_at_height(node, height):
 
 
 def union_curves_on_xy_plane(curves):
-    if len(curves) > 1:
-        return rs.CurveBooleanUnion([rs.CopyObject(curve, rs.AddPoint(0, 0, -rs.CurveStartPoint(curve).Z)) for curve in curves if rs.IsCurve(curve) and rs.IsCurveClosed(curve)])
-    elif len(curves) == 1:
-        return [rs.CopyObject(curve, rs.AddPoint(0, 0, -rs.CurveStartPoint(curve).Z)) for curve in curves if rs.IsCurve(curve) and rs.IsCurveClosed(curve)]
-    else:
-        raise ValueError("Called union_curves_on_xy_plane with no curves")
+    if curves!=None:
+        if len(curves) > 1:
+            try:
+                return rs.CurveBooleanUnion([rs.CopyObject(curve, rs.AddPoint(0, 0, -rs.CurveStartPoint(curve).Z)) for curve in curves if rs.IsCurve(curve) and rs.IsCurveClosed(curve)])
+            except Exception as err:
+                for curve in curves:
+                    print(curve, rs.ObjectType(curve))
+                raise ValueError(err)
+        elif len(curves) == 1:
+            return [rs.CopyObject(curve, rs.AddPoint(0, 0, -rs.CurveStartPoint(curve).Z)) for curve in curves if curve!=None and rs.IsCurve(curve) and rs.IsCurveClosed(curve)]
+        else:
+            raise ValueError("Called union_curves_on_xy_plane with no curves")
 
 
 def curve_overlap_check(curves1, curves2, width=0):

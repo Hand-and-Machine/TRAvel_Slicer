@@ -49,6 +49,7 @@ class Graph:
             #raise ValueError("Unable to find a hamiltonian path in graph")
             print("Unable to find a hamiltonian path in graph")
             return [[]]
+        print(str(len(paths))+" hamiltonian paths found.")
         return sorted(paths, key=lambda path: path[1])[0]
 
     def get_all_hamiltonian_paths(self, shortest=False):
@@ -64,14 +65,13 @@ class Graph:
     def get_hamiltonian_paths(self, path, paths, shortest=False):
         self.count = self.count + 1
         if self.count > self.count_limit:
-            raise ValueError("Exceeded search limit")
-            #print("Exceeded search limit")
-            #return paths
+            #raise ValueError("Exceeded search limit")
+            print("Exceeded search limit")
+            return paths
 
         if all([node in path[0] for node in self.nodes]):
             if path[1] < self.min_weight: self.min_weight = path[1]
             paths.append(path)
-            print("Hamiltonian path found")
             return paths
 
         for end in self.edge_keys[path[0][-1]]:
