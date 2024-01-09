@@ -628,9 +628,10 @@ def fill_curves_with_fermat_spiral(t, curves, start_pnt=None, wall_mode=False, w
     final_points = connect_spiralled_nodes(t, region_tree)
     final_curve = rs.AddCurve(final_points)
     final_spiral = rs.DivideCurve(final_curve, int(rs.CurveLength(final_curve)/t.get_resolution()))
-   #print(len(final_points), len(final_spiral))
+
     t.pen_up()
     travel_paths.append(rs.AddCurve([t.get_position(), final_spiral[0]]))
+    t.lift(t.get_layer_height())
     t.set_position(final_spiral[0].X, final_spiral[0].Y, t.get_position().Z)
     t.set_position(final_spiral[0].X, final_spiral[0].Y, final_spiral[0].Z)
     t.pen_down()
@@ -817,7 +818,7 @@ def slice_vertical_and_fermat_fill(t, shape, wall_mode=False, walls=3, fill_bott
         #print("Failed to find vertical travel path minimization, printing layer by layer. "+str(error))
         #travel_paths = travel_paths + slice_fermat_fill(t, shape, wall_mode=wall_mode, walls=walls, fill_bottom=fill_bottom, bottom_layers=bottom_layers)
 
-    print("Full path generation: "+str(time.time()-overall_start_time)+" seconds")
+    print("Full path generation: "+str(round(time.time()-overall_start_time, 3))+" seconds")
 
     return travel_paths, tree, path, center_points, bboxes, edges
 

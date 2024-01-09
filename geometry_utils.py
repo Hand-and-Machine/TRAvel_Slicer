@@ -125,9 +125,10 @@ def get_shortest_indices(start, end, points):
     return indices
 
 
-def get_curves(shape, z, retry=True):
+def get_curves(shape, z, retry=0):
     plane = get_plane(float(z))
     initial_curves = rs.AddSrfContourCrvs(shape, plane)
+    if len(initial_curves) > 1: initial_curves = rs.JoinCurves(initial_curves)
 
     curves = []
     for curve in initial_curves:
@@ -138,19 +139,23 @@ def get_curves(shape, z, retry=True):
                 if rs.IsCurveClosable(curve):
                     curves.append(rs.CloseCurve(curve))
                 else:
-                    print("Slice: curve is not closed and is not closable", curve)
+                    print("Slice: curve is not closed and is not closable at height "+str(z))
             else:
                 curves.append(curve)
 
-    if initial_curves > 0 and len(curves) == 0 and retry:
+    if initial_curves > 0 and len(curves) == 0 and retry==0:
         print("Slicing shape at height "+str(z)+" was unsuccessful. Retrying.")
-        return get_curves(shape, float(z)+0.01, False)
+        return get_curves(shape, float(z)-0.01, retry+1)
+    elif initial_curves > 0 and len(curves) == 0 and retry==1:
+        print("Slicing shape at height "+str(z)+" was unsuccessful. Retrying.")
+        return get_curves(shape, float(z)+0.02, retry+1)
 
     try:
         curve_groups = get_curve_groupings(curves)
+        if retry>0: print("Success after retry at height "+str(z))
         return curve_groups
     except Exception as err:
-        print("Could not group curves", err)
+        print("Could not group curves at height "+str(z), err)
         return [curves]
 
 
@@ -158,7 +163,8 @@ def get_curve_groupings(curves):
     # find curve groupings from intersection of shape with plane
     # curves can represent the inside of a surface or potentially
     # a nested curve within another set of curves defining a surface
-    inside = {c:{c2:rs.PlanarClosedCurveContainment(curves[c], curves[c2])==3 for c2 in range(len(curves)) if c2 != c} for c in range(len(curves))}
+    all_points = [rs.DivideCurve(curve, 100) for curve in curves]
+    inside = {c:{c2:all([rs.PointInPlanarClosedCurve(p, curves[c2]) for p in all_points[c]]) for c2 in range(len(curves)) if c2 != c} for c in range(len(curves))}
     outer_curves = [c for c in range(len(curves)) if not any([inside[c][k] for k in inside[c]])]
     inner_curves = [c for c in range(len(curves)) if c not in outer_curves]
 

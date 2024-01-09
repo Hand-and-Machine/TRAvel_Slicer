@@ -15,49 +15,44 @@ from graph_utils import *
 import geometry_utils
 from geometry_utils import *
 
-def test_graph():
-    test = Graph()
-    a = Graph_Node("A")
-    b = Graph_Node("B")
-    c = Graph_Node("C")
-    d = Graph_Node("D")
-    test.add_node(a)
-    test.add_node(b)
-    test.add_node(c)
-    test.add_node(d)
+global nozzle_width
+global nozzle_height
+nozzle_width = 8
+nozzle_height = 30
 
-    test.add_edge(Graph_Edge(a, b, 3))
-    test.add_edge(Graph_Edge(b, a, 3))
 
-    test.add_edge(Graph_Edge(a, c, 5))
-    test.add_edge(Graph_Edge(c, a, 5))
+def a_vertical_path(t, shape):
+    global overlap
+    overlap = {}
+    init_tree, center_points = build_vertical_tree(t, shape)
     
-    test.add_edge(Graph_Edge(b, c, 4))
-    test.add_edge(Graph_Edge(c, b, 4))
-
-    test.add_edge(Graph_Edge(c, d, 2))
-    test.add_edge(Graph_Edge(d, c, 2))
-
-    path_found, path = test.check_for_path(a, d)
-    print(path_found)
-    if path: print([node.data for node in path])
+    ##
 
 
+# My vertical path finding code
 def best_vertical_path(t, shape):
     global overlap
     overlap = {}
-    vert_tree, center_points = build_vertical_tree(t, shape)
+
+    # center_points is a visualization variable for debugging,
+    # it isn't used further in the code for calculations
+    init_tree, center_points = build_vertical_tree(t, shape)
+    vert_tree = segment_tree_by_height(t, init_tree, get_shape_height(shape))
+    if len(vert_tree.get_all_nodes([])) > len(init_tree.get_all_nodes([])):
+        raise ValueError("There should not be more super nodes than nodes")
+
     all_nodes = vert_tree.get_all_nodes([])
 
     print("Size of grouped height tree: "+str(len(all_nodes)))
 
     st_time = time.time()
 
-    path = []
+    # edges and boundingBoxes is also used for debugging and
+    # visualization rather than further calculations
     edges = []
     boundingBoxes = []
-    nozzle_width = 8 # maximum width of nozzle
-    nozzle_height = 30 # height of nozzle in mm
+
+    path = []
     height = get_shape_height(shape)
     for h in range(int(math.floor(height / nozzle_height))+1):
         nodes_at_height = [node for node in all_nodes if node.height == h]
@@ -85,7 +80,7 @@ def best_vertical_path(t, shape):
                     weight = rs.Distance(prev_node.data.sub_nodes[-1].start_point, node.data.sub_nodes[0].start_point)
                 height_graph.starts.append((node, weight))
 
-        print("starts", [(n[0].name, n[1]) for n in height_graph.starts])
+        print("starts", [(n[0].name, round(n[1], 2)) for n in height_graph.starts])
 
         # add edges to graph
         # edges related to height dependency
@@ -153,9 +148,9 @@ def best_vertical_path(t, shape):
         start_time = time.time()
         path_section = height_graph.get_shortest_hamiltonian_path()[0]
         path = path + path_section
-        print("Hamiltonian Path Search Time: "+str(time.time() - start_time)+" seconds")
+        print("Hamiltonian Path Search Time: "+str(round(time.time() - start_time, 3))+" seconds")
 
-    print("Graph construction time: "+str(time.time() - st_time)+" seconds")
+    print("Graph construction time: "+str(round(time.time() - st_time, 3))+" seconds")
 
     return vert_tree, path, center_points, boundingBoxes, edges
 
@@ -163,7 +158,6 @@ def best_vertical_path(t, shape):
 def build_vertical_tree(t, shape):
     start_time = time.time()
 
-    nozzle_width = 8
     layers = int(math.floor(get_shape_height(shape) / t.get_layer_height()))
     root = Node('root')
     root.name = 'root'
@@ -257,19 +251,12 @@ def build_vertical_tree(t, shape):
 
         previous_nodes = new_nodes
 
-    print("Initial treeing time: "+str(time.time() - start_time)+" seconds")
+    print("Initial treeing time: "+str(round(time.time() - start_time, 3))+" seconds")
     print("Initial height tree size: "+str(len(root.get_all_nodes([]))))
 
-    super_root = segment_tree_by_height(t, root, get_shape_height(shape))
-    if len(super_root.get_all_nodes([])) > len(root.get_all_nodes([])):
-        raise ValueError("There should not be more super nodes than nodes")
-
-    return super_root, center_points
+    return root, center_points
 
 def segment_tree_by_height(t, tree, total_height):
-    #nozzle_height = t.get_nozzle_height()
-    #nozzle_width = t.get_nozzle_max_width()
-    nozzle_height = 30 #height of nozzle in mm
     limit = int(math.floor(nozzle_height / t.get_layer_height()))
     super_root = Node('root')
     super_root.name = 'root'
@@ -281,11 +268,11 @@ def segment_tree_by_height(t, tree, total_height):
     for child in tree.children:
         group_by_height(child, super_root, limit, idx=idx)
         idx = idx + 1
-    print("Grouping tree by nozzle height: "+str(time.time() - start_time)+" seconds")
+    print("Grouping tree by nozzle height: "+str(round(time.time() - start_time, 3))+" seconds")
 
     s_t = time.time()
     divide_by_overlap(super_root, total_height)
-    print("Dividing super tree by overlap: "+str(time.time() - s_t)+" seconds")
+    print("Dividing super tree by overlap: "+str(round(time.time() - s_t, 3))+" seconds")
     return super_root
 
 
@@ -328,10 +315,6 @@ def group_by_height(node, super_node, height, idx=0):
 
 
 def divide_by_overlap(super_root, total_height):
-    #nozzle_height = t.get_nozzle_height()
-    #nozzle_width = t.get_nozzle_max_width()
-    nozzle_width = 8
-    nozzle_height = 30 #height of nozzle in mm
     height = int(math.floor(total_height / nozzle_height)) + 1
     nodes = super_root.get_all_nodes([])
     for h in range(height):
@@ -487,7 +470,6 @@ def check_path(next_node, path):
 
 
 def check_layers(node1, node2):
-    nozzle_width = 8 #max diameter of the nozzle in mm
     for sub in node1.data.sub_nodes:
             for sub2 in node2.data.sub_nodes:
                 if sub2.height > sub.height and curve_overlap_check(sub.data, sub2.data, nozzle_width):

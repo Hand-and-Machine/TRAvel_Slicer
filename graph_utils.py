@@ -6,9 +6,10 @@ class Graph:
         self.starts = []
 
         self.count = 0
-        self.count_limit = 10000
+        self.count_limit = 1000000
 
         self.path = None
+        self.max_paths = 10
         self.path_found = False
 
         self.path_check = None
@@ -46,11 +47,12 @@ class Graph:
         self.count = 0
         paths = self.get_all_hamiltonian_paths(True)
         if len(paths) == 0:
-            #raise ValueError("Unable to find a hamiltonian path in graph")
             print("Unable to find a hamiltonian path in graph")
             return [[]]
+        paths = sorted(paths, key=lambda path: path[1])
         print(str(len(paths))+" hamiltonian paths found.")
-        return sorted(paths, key=lambda path: path[1])[0]
+        print("Hamiltonian path weights: ", [round(path[1], 2) for path in paths])
+        return paths[0]
 
     def get_all_hamiltonian_paths(self, shortest=False):
         paths = []
@@ -64,8 +66,7 @@ class Graph:
 
     def get_hamiltonian_paths(self, path, paths, shortest=False):
         self.count = self.count + 1
-        if self.count > self.count_limit:
-            #raise ValueError("Exceeded search limit")
+        if self.count > self.count_limit or len(paths)>=self.max_paths:
             print("Exceeded search limit")
             return paths
 
@@ -75,7 +76,6 @@ class Graph:
             return paths
 
         for end in self.edge_keys[path[0][-1]]:
-#        for end in self.edges[path[0][-1]].keys():
             weight = path[1]+self.edges[path[0][-1]][end]
             # check that we have not already been to this graph node
             if end not in path[0]:
