@@ -266,16 +266,16 @@ class Grid:
         bbox = rs.BoundingBox(points)
         self.minX = bbox[0].X
         self.minY = bbox[0].Y
-        self.width = width
+        self.width = float(width)
 
-        self.max_x_idx = int((bbox[2].X - self.minX) // width)
-        self.max_y_idx = int((bbox[2].Y - self.minY) // width)
+        self.max_x_idx = int((bbox[2].X - self.minX) // self.width)
+        self.max_y_idx = int((bbox[2].Y - self.minY) // self.width)
 
         self.grid = [[[] for _ in range(self.max_y_idx+1)] for _ in range(self.max_x_idx+1)]
 
         for point in points:
-            x_idx = int((point.X - self.minX) // width)
-            y_idx = int((point.Y - self.minY) // width)
+            x_idx = int((point.X - self.minX) // self.width)
+            y_idx = int((point.Y - self.minY) // self.width)
 
             self.grid[x_idx][y_idx].append(point)
 
