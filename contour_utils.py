@@ -58,10 +58,11 @@ def get_isocontour(curve, offset):
     num_pnts = get_num_points(curve, offset)
 
     if num_pnts <= 5:
-        #print("Precision too low or curve too small")
         return None
 
     points = rs.DivideCurve(curve, num_pnts)
+    grid = Grid(points, offset)
+
     winding_order, direction = get_winding_order(curve, points, offset)
 
     if winding_order == None:
@@ -89,10 +90,11 @@ def get_isocontour(curve, offset):
         if not rs.PointInPlanarClosedCurve(new_point, curve):
             include = False
         else:
-            # check that distance from all points is >= offset
-            idx_range = range(max(i-10, 0), len(points), 4) + range(0, max(i-10, 0), 4)
-            for j in idx_range:
-                if not i == j and rs.Distance(points[j], new_point) < offset:
+            # check that distance from all neighboring points is >= offset
+            neighbor_points = grid.get_neighbors(new_point)
+
+            for point in neighbor_points:
+                if not point == points[i] and rs.Distance(point, new_point) < offset:
                     include = False
                     break
         if include:

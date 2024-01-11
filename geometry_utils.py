@@ -260,3 +260,33 @@ def split_curve(curve, split_point, tolerance):
                 sequences.append([])
 
     return [rs.AddCurve([points[p] for p in sequence]) for sequence in sequences if len(sequence) > 1], [points[sequence[0]] for sequence in sequences] + [points[sequence[-1]] for sequence in sequences]
+
+class Grid:
+    def __init__(self, points, width):
+        bbox = rs.BoundingBox(points)
+        self.minX = bbox[0].X
+        self.minY = bbox[0].Y
+        self.width = width
+
+        self.max_x_idx = int((bbox[2].X - self.minX) // width)
+        self.max_y_idx = int((bbox[2].Y - self.minY) // width)
+
+        self.grid = [[[] for _ in range(self.max_y_idx+1)] for _ in range(self.max_x_idx+1)]
+
+        for point in points:
+            x_idx = int((point.X - self.minX) // width)
+            y_idx = int((point.Y - self.minY) // width)
+
+            self.grid[x_idx][y_idx].append(point)
+
+    def get_neighbors(self, point):
+        x_idx = int((point.X - self.minX) // self.width)
+        y_idx = int((point.Y - self.minY) // self.width)
+
+        points = []
+
+        for x in range(max(0, x_idx-1), min(self.max_x_idx, x_idx+2)):
+            for y in range(max(0, y_idx-1), min(self.max_y_idx, y_idx+2)):
+                points = points + self.grid[x][y]
+        
+        return points
