@@ -111,39 +111,39 @@ def best_vertical_path(t, shape):
         #height_graph.print_graph_data()
         height_graph.path_check = check_path
 
-        bbs = [rs.BoundingBox([data for sub in node.data.sub_nodes for data in sub.data]) for node in height_graph.nodes]
-        for bb in bbs:
-            try: 
-                box = rs.AddBox(bb)
-                boundingBoxes.append(box)
-            except:
+        #bbs = [rs.BoundingBox([data for sub in node.data.sub_nodes for data in sub.data]) for node in height_graph.nodes]
+        #for bb in bbs:
+        #    try: 
+        #        box = rs.AddBox(bb)
+        #        boundingBoxes.append(box)
+        #    except:
                 # this may be a single layer
-                try:
-                    z = None
-                    minX = None
-                    maxX = None
-                    minY = None
-                    maxY = None
-                    for pnt in bb:
-                        if minX == None or pnt.X < minX:
-                            minX = pnt.X
-                        if maxX == None or pnt.X > maxX:
-                            maxX = pnt.X
-                        if minY == None or pnt.Y < minY:
-                            minY = pnt.Y
-                        if maxY == None or pnt.Y > maxY:
-                            maxY = pnt.Y
-                        if z == None:
-                            z = pnt.Z
-                    points = [
-                        rs.AddPoint(minX, minY, z),
-                        rs.AddPoint(minX, maxY, z),
-                        rs.AddPoint(maxX, maxY, z),
-                        rs.AddPoint(maxX, minY, z)]
-                    srf = rs.AddSrfPt(points)
-                    boundingBoxes.append(srf)
-                except:
-                    print("Unable to create box from bounding box: ", bb)
+       #         try:
+       #             z = None
+       #             minX = None
+       #             maxX = None
+       #             minY = None
+       #             maxY = None
+       #             for pnt in bb:
+       #                 if minX == None or pnt.X < minX:
+       #                     minX = pnt.X
+       #                 if maxX == None or pnt.X > maxX:
+       #                     maxX = pnt.X
+       #                 if minY == None or pnt.Y < minY:
+       #                     minY = pnt.Y
+       #                 if maxY == None or pnt.Y > maxY:
+       #                     maxY = pnt.Y
+       #                 if z == None:
+       #                     z = pnt.Z
+       #             points = [
+       #                 rs.AddPoint(minX, minY, z),
+       #                 rs.AddPoint(minX, maxY, z),
+       #                 rs.AddPoint(maxX, maxY, z),
+       #                 rs.AddPoint(maxX, minY, z)]
+       #             srf = rs.AddSrfPt(points)
+       #             boundingBoxes.append(srf)
+       #         except:
+       #             print("Unable to create box from bounding box: ", bb)
 
         start_time = time.time()
         path_section = height_graph.get_shortest_hamiltonian_path()[0]
@@ -380,7 +380,7 @@ def subdivide_by_overlap(nodes, width):
                     above = False
                     below = False
                     for s2 in node2.sub_nodes:
-                        if curve_overlap_check(union_curves_on_xy_plane(s1.data), union_curves_on_xy_plane(s2.data), width):
+                        if curve_overlap_check(union_curves_on_xy_plane([crv for g in s1.data for crv in g]), union_curves_on_xy_plane([crv for g in s2.data for crv in g]), width):
                             if s1.height > s2.height:
                                 above = True
                             if s1.height < s2.height:
@@ -472,6 +472,6 @@ def check_path(next_node, path):
 def check_layers(node1, node2):
     for sub in node1.data.sub_nodes:
             for sub2 in node2.data.sub_nodes:
-                if sub2.height > sub.height and curve_overlap_check(sub.data, sub2.data, nozzle_width):
+                if sub2.height > sub.height and curve_overlap_check([crv for g in sub.data for crv in g], [crv for g in sub2.data for crv in g], nozzle_width):
                     return False
     return True
