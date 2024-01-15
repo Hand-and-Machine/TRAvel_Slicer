@@ -161,7 +161,7 @@ def fermat_spiral(t, spiral, indices):
     for i in order:
         connection = {"point": None, "distance": 1000000}
         for j in range(indices[i]-1, 0, -1):
-            dist = offset - rs.Distance(spiral[indices[i]], spiral[j])
+            dist = 0.75*offset - rs.Distance(spiral[indices[i]], spiral[j])
             if dist < -offset/5:
                 break
             if abs(dist) < connection["distance"]:
