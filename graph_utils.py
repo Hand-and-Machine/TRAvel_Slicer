@@ -7,6 +7,7 @@ class Graph:
 
         self.count = 0
         self.count_limit = 1000000
+        self.print_exceeded = True
 
         self.path = None
         self.max_paths = 10
@@ -44,7 +45,6 @@ class Graph:
             if node.data == data: return node
 
     def get_shortest_hamiltonian_path(self):
-        self.count = 0
         paths = self.get_all_hamiltonian_paths(True)
         if len(paths) == 0:
             print("Unable to find a hamiltonian path in graph")
@@ -55,6 +55,8 @@ class Graph:
         return paths[0]
 
     def get_all_hamiltonian_paths(self, shortest=False):
+        self.count = 0
+        self.print_exceeded = True
         paths = []
         for start, weight in self.starts:
             if start not in self.nodes:
@@ -67,7 +69,9 @@ class Graph:
     def get_hamiltonian_paths(self, path, paths, shortest=False):
         self.count = self.count + 1
         if self.count > self.count_limit or len(paths)>=self.max_paths:
-            print("Exceeded search limit")
+            if self.print_exceeded:
+                print("Exceeded search limit")
+                self.print_exceeded = False
             return paths
 
         if all([node in path[0] for node in self.nodes]):

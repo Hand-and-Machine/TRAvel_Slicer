@@ -56,7 +56,7 @@ def best_vertical_path(t, shape):
     height = get_shape_height(shape)
     for h in range(int(math.floor(height / nozzle_height))+1):
         nodes_at_height = [node for node in all_nodes if node.height == h]
-        print("Nodes at height "+str(h)+": "+str(len(nodes_at_height)))
+        print("Nodes at nozzle height "+str(h)+": "+str(len(nodes_at_height)))
         if len(nodes_at_height) == 0: break
 
         # create a graph for this height chunk
@@ -80,11 +80,11 @@ def best_vertical_path(t, shape):
                     weight = rs.Distance(prev_node.data.sub_nodes[-1].start_point, node.data.sub_nodes[0].start_point)
                 height_graph.starts.append((node, weight))
 
-        print("starts", [(n[0].name, round(n[1], 2)) for n in height_graph.starts])
+        #print("starts", [(n[0].name, round(n[1], 2)) for n in height_graph.starts])
 
         # add edges to graph
-        # edges related to height dependency
         for graph_node in height_graph.nodes:
+            # edges related to height dependency
             node1 = graph_node.data
             for child in node1.children:
                 if child in nodes_at_height:
@@ -99,51 +99,54 @@ def best_vertical_path(t, shape):
             siblings_and_counsins = [n for n in nodes_at_height if n not in direct_relations]
             for node2 in siblings_and_counsins:
                 # do not add edge if node2 overlaps node1
-                #if not check_path(height_graph.get_node(node2), [graph_node]):
-                # compute travel between curves, where weight is set as
-                # distance between center of start and end curves within node
-                weight = rs.Distance(node1.sub_nodes[-1].start_point, node2.sub_nodes[0].start_point)
-                height_graph.add_edge(Graph_Edge(graph_node, height_graph.get_node(node2), weight))
+                if check_path(height_graph.get_node(node2), [graph_node]):
+                    # compute travel between curves, where weight is set as
+                    # distance between center of start and end curves within node
+                    weight = rs.Distance(node1.sub_nodes[-1].start_point, node2.sub_nodes[0].start_point)
+                    height_graph.add_edge(Graph_Edge(graph_node, height_graph.get_node(node2), weight))
 
-                arrow = rs.AddCurve([graph_node.data.sub_nodes[-1].start_point, node2.sub_nodes[0].start_point])
-                edges.append(arrow)
+                    arrow = rs.AddCurve([graph_node.data.sub_nodes[-1].start_point, node2.sub_nodes[0].start_point])
+                    edges.append(arrow)
 
         #height_graph.print_graph_data()
         height_graph.path_check = check_path
 
-        #bbs = [rs.BoundingBox([data for sub in node.data.sub_nodes for data in sub.data]) for node in height_graph.nodes]
-        #for bb in bbs:
-        #    try: 
-        #        box = rs.AddBox(bb)
-        #        boundingBoxes.append(box)
-        #    except:
-                # this may be a single layer
-       #         try:
-       #             z = None
-       #             minX = None
-       #             maxX = None
-       #             minY = None
-       #             maxY = None
-       #             for pnt in bb:
-       #                 if minX == None or pnt.X < minX:
-       #                     minX = pnt.X
-       #                 if maxX == None or pnt.X > maxX:
-       #                     maxX = pnt.X
-       #                 if minY == None or pnt.Y < minY:
-       #                     minY = pnt.Y
-       #                 if maxY == None or pnt.Y > maxY:
-       #                     maxY = pnt.Y
-       #                 if z == None:
-       #                     z = pnt.Z
-       #             points = [
-       #                 rs.AddPoint(minX, minY, z),
-       #                 rs.AddPoint(minX, maxY, z),
-       #                 rs.AddPoint(maxX, maxY, z),
-       #                 rs.AddPoint(maxX, minY, z)]
-       #             srf = rs.AddSrfPt(points)
-       #             boundingBoxes.append(srf)
-       #         except:
-       #             print("Unable to create box from bounding box: ", bb)
+        try:
+            bbs = [rs.BoundingBox([data for sub in node.data.sub_nodes for data in sub.data]) for node in height_graph.nodes]
+            for bb in bbs:
+                try: 
+                    box = rs.AddBox(bb)
+                    boundingBoxes.append(box)
+                except:
+                    # this may be a single layer
+                    try:
+                        z = None
+                        minX = None
+                        maxX = None
+                        minY = None
+                        maxY = None
+                        for pnt in bb:
+                            if minX == None or pnt.X < minX:
+                                minX = pnt.X
+                            if maxX == None or pnt.X > maxX:
+                                maxX = pnt.X
+                            if minY == None or pnt.Y < minY:
+                                minY = pnt.Y
+                            if maxY == None or pnt.Y > maxY:
+                                maxY = pnt.Y
+                            if z == None:
+                                z = pnt.Z
+                        points = [
+                            rs.AddPoint(minX, minY, z),
+                            rs.AddPoint(minX, maxY, z),
+                            rs.AddPoint(maxX, maxY, z),
+                            rs.AddPoint(maxX, minY, z)]
+                        srf = rs.AddSrfPt(points)
+                        boundingBoxes.append(srf)
+                    except:
+                        print("Unable to create box from bounding box: ", bb)
+        except Exception as err:
+            print("Unable to create bounding boxes for debugging: "+str(err))
 
         start_time = time.time()
         path_section = height_graph.get_shortest_hamiltonian_path()[0]
