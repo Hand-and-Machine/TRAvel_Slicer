@@ -31,6 +31,8 @@ def a_vertical_path(t, shape):
 
 # My vertical path finding code
 def best_vertical_path(t, shape):
+    vert_start_time = time.time()
+
     global overlap
     overlap = {}
 
@@ -153,8 +155,8 @@ def best_vertical_path(t, shape):
         path = path + path_section
         print("Hamiltonian Path Search Time: "+str(round(time.time() - start_time, 3))+" seconds")
 
-    print("Graph construction time: "+str(round(time.time() - st_time, 3))+" seconds")
-
+    print("Graph construction and all hamiltonian paths search time: "+str(round(time.time() - st_time, 3))+" seconds")
+    print("Total Vertical Path search time: "+str(round(time.time() - vert_start_time, 3))+" seconds")
     return vert_tree, path, center_points, boundingBoxes, edges
 
 

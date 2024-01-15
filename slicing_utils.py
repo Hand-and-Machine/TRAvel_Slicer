@@ -80,12 +80,20 @@ def spiral_contours(t, isocontours, start_index):
         closest = {"point": None, "distance": 1000000}
 
         for j in marching_order:
-            dist = offset - rs.Distance(start_point, points[j])
-            if dist < -offset/5:
-                break
-            if abs(dist) < closest["distance"]:
-                closest["distance"] = dist
-                closest["point"] = j
+            dist = abs(0.75*offset - rs.Distance(start_point, points[j]))
+            if dist < closest["distance"]:
+                indices1 = []
+                indices2 = []
+                if j > start_index:
+                    indices1 = range(j, len(points)) + range(0, start_index+1)
+                    indices2 = range(start_index, j-1, -1)
+                elif j < start_index:
+                    indices1 = range(j, start_index+1)
+                    indices2 = range(j, 0, -1) + range(len(points)-1, start_index-1, -1)
+
+                if len(indices2) > len(indices1):
+                    closest["distance"] = dist
+                    closest["point"] = j
         break_index = closest["point"]
         break_point = points[break_index]
 
@@ -131,7 +139,7 @@ def fermat_spiral(t, spiral, indices):
     for i in order:
         connection = {"point": None, "distance": 1000000}
         for j in range(indices[i]-1, 0, -1):
-            dist = offset - rs.Distance(spiral[indices[i]], spiral[j])
+            dist = 0.75*offset - rs.Distance(spiral[indices[i]], spiral[j])
             if dist < -offset/5:
                 break
             if abs(dist) < connection["distance"]:
@@ -803,17 +811,17 @@ def slice_vertical_and_fermat_fill(t, shape, wall_mode=False, walls=3, fill_bott
             #else: start_point = t.get_position()
             start_point = t.get_position()
             for curves in node.data:
-                try:
+                #try:
                     if not wall_mode or (wall_mode and fill_bottom and node.height<bottom_layers):
                         travel_paths = travel_paths + fill_curves_with_fermat_spiral(t, curves, start_pnt=start_point, initial_offset=initial_offset)[0]
                     else:
                         travel_paths = travel_paths + fill_curves_with_fermat_spiral(t, curves, start_pnt=start_point, wall_mode=wall_mode, walls=walls, initial_offset=initial_offset)[0]
-                except Exception as err:
-                    print("Failed to fermat spiral layer "+str(node.height), err)
-                    if not wall_mode or (wall_mode and fill_bottom and node.height<bottom_layers):
-                        travel_paths = travel_paths + fill_curves_with_contours(t, curves, start_pnt=start_point, initial_offset=initial_offset)
-                    else:
-                        travel_paths = travel_paths + fill_curves_with_contours(t, curves, start_pnt=start_point, wall_mode=wall_mode, walls=walls, initial_offset=initial_offset)
+                #except Exception as err:
+                    #print("Failed to fermat spiral layer "+str(node.height), err)
+                    #if not wall_mode or (wall_mode and fill_bottom and node.height<bottom_layers):
+                    #    travel_paths = travel_paths + fill_curves_with_contours(t, curves, start_pnt=start_point, initial_offset=initial_offset)
+                    #else:
+                    #    travel_paths = travel_paths + fill_curves_with_contours(t, curves, start_pnt=start_point, wall_mode=wall_mode, walls=walls, initial_offset=initial_offset)
     #except Exception as error:
         #print("Failed to find vertical travel path minimization, printing layer by layer. "+str(error))
         #travel_paths = travel_paths + slice_fermat_fill(t, shape, wall_mode=wall_mode, walls=walls, fill_bottom=fill_bottom, bottom_layers=bottom_layers)

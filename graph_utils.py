@@ -1,3 +1,5 @@
+import time
+
 class Graph:
     def __init__(self):
         self.nodes = []
@@ -6,7 +8,8 @@ class Graph:
         self.starts = []
 
         self.count = 0
-        self.count_limit = 1000000
+        self.start_time = 0
+        self.search_limit = 15
         self.print_exceeded = True
 
         self.path = None
@@ -56,6 +59,7 @@ class Graph:
 
     def get_all_hamiltonian_paths(self, shortest=False):
         self.count = 0
+        self.start_time = time.time()
         self.print_exceeded = True
         paths = []
         for start, weight in self.starts:
@@ -68,7 +72,7 @@ class Graph:
 
     def get_hamiltonian_paths(self, path, paths, shortest=False):
         self.count = self.count + 1
-        if self.count > self.count_limit or len(paths)>=self.max_paths:
+        if (self.count % 50 == 0 and time.time() - self.start_time > self.search_limit) or len(paths)>=self.max_paths:
             if self.print_exceeded:
                 print("Exceeded search limit")
                 self.print_exceeded = False

@@ -60,7 +60,7 @@ def get_surface(curve, z):
 
 
 def get_num_points(curve, offset):
-    return int(rs.CurveLength(curve)/(float(offset)/4))
+    return max(int(rs.CurveLength(curve)/(float(offset)/4)), 4)
 
 
 def get_winding_order(curve, points, offset):
@@ -209,7 +209,7 @@ def split_curve_at(curve, points, tolerance=0):
 
 
 def split_curve(curve, split_point, tolerance):
-    points = rs.DivideCurve(curve, int(rs.CurveLength(curve)/(tolerance/4)))
+    points = rs.DivideCurve(curve, get_num_points(curve, tolerance))
 
     # find closest point first
     closest_idx, dist = closest_point(split_point, points)
@@ -259,7 +259,7 @@ def split_curve(curve, split_point, tolerance):
             elif new_points[next_i] != None and next_i != start_index:
                 sequences.append([])
 
-    return [rs.AddCurve([points[p] for p in sequence]) for sequence in sequences if len(sequence) > 1], [points[sequence[0]] for sequence in sequences] + [points[sequence[-1]] for sequence in sequences]
+    return [rs.AddCurve([points[p] for p in sequence]) for sequence in sequences if len(sequence) > 1], [points[sequence[0]] for sequence in sequences if len(sequences)>0] + [points[sequence[-1]] for sequence in sequences if len(sequences)>0]
 
 class Grid:
     def __init__(self, points, width):
