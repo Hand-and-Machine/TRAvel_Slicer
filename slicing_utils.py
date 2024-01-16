@@ -794,7 +794,6 @@ def slice_vertical_and_fermat_fill(t, shape, wall_mode=False, walls=3, fill_bott
     start_point = path[0].data.sub_nodes[0].start_point
     for sup_node in path:
         for node in sup_node.data.sub_nodes:
-            print("Layer "+str(node.height))
             #if node == sup_node.data.sub_nodes[0]: start_point = node.start_point
             #else: start_point = t.get_position()
             start_point = t.get_position()
