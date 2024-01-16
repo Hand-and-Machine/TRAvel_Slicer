@@ -21,14 +21,6 @@ nozzle_width = 8
 nozzle_height = 30
 
 
-def a_vertical_path(t, shape):
-    global overlap
-    overlap = {}
-    init_tree, center_points = build_vertical_tree(t, shape)
-    
-    ##
-
-
 # My vertical path finding code
 def best_vertical_path(t, shape):
     vert_start_time = time.time()

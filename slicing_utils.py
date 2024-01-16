@@ -72,7 +72,7 @@ def get_corner(t, outer_curve, inner_curve, points):
     return closest["point"]
 
 
-def spiral_contours(t, isocontours, start_index):
+def spiral_contours(t, isocontours, start_index=0):
     if len(isocontours) == 0:
         print("Error: no isocontours passed in")
         return
@@ -85,8 +85,8 @@ def spiral_contours(t, isocontours, start_index):
 
     # choose appropriate starting index on outermost contour
     # get center point of innermost contour to compare
-    if not start_index:
-        start_index = get_corner(t, isocontours[0], isocontours[-1], points)
+    #if not start_index:
+        #start_index = get_corner(t, isocontours[0], isocontours[-1], points)
 
     # spiral region
     start_point = None
@@ -99,23 +99,24 @@ def spiral_contours(t, isocontours, start_index):
         closest = {"point": None, "distance": 1000000}
 
         for j in marching_order:
-            dist = abs(0.75*offset - rs.Distance(start_point, points[j]))
-            if dist < closest["distance"]:
-                indices1 = []
-                indices2 = []
-                if j > start_index:
-                    indices1 = range(j, len(points)) + range(0, start_index+1)
-                    indices2 = range(start_index, j-1, -1)
-                elif j < start_index:
-                    indices1 = range(j, start_index+1)
-                    indices2 = range(j, 0, -1) + range(len(points)-1, start_index-1, -1)
+            if j != start_index:
+                dist = abs(0.75*offset - rs.Distance(start_point, points[j]))
+                if dist < closest["distance"]:
+                    indices1 = []
+                    indices2 = []
+                    if j > start_index:
+                        indices1 = range(j, len(points)) + range(0, start_index+1)
+                        indices2 = range(j, start_index-1, -1)
+                    elif j < start_index:
+                        indices1 = range(j, start_index+1)
+                        indices2 = range(j, -1, -1) + range(len(points)-1, start_index-1, -1)
 
-                if len(indices2) > len(indices1):
-                    closest["distance"] = dist
-                    closest["point"] = j
+                    if len(indices2) > len(indices1):
+                        closest["distance"] = dist
+                        closest["point"] = j
         break_index = closest["point"]
         if break_index == None:
-            print("Unable to find break_index on isocontour "+str(j+1)+" out of "+str(len(isocontours)))
+            print("Unable to find break_index on isocontour "+str(i+1)+" out of "+str(len(isocontours)))
             break
         break_point = points[break_index]
 
@@ -264,10 +265,6 @@ def connect_path(t, node, all_nodes, start_idx, spiral):
 
     marching_order, reverse = get_marching_order(node, start_idx, final_idx)
 
-    for x in [k for n in node.connection for k in node.connection[n].keys()]:
-        if x not in marching_order:
-            print(str(x)+" not in marching order.", marching_order)
-
     if not node.reverse:
         node.reverse = reverse
 
@@ -393,8 +390,8 @@ def connect_node_to_parent(t, node, parent):
 
     for p in range(len(points)):
         dist1 = rs.Distance(points[p], pnt2)
-        dist2 = rs.Distance(points[p], pnt1) - offset
-        if abs(dist2) < offset*1.2 and dist1 < closest["end"]["distance"]:
+        dist2 = rs.Distance(points[p], pnt1) - offset*0.75
+        if abs(dist2) <= offset and dist1 < closest["end"]["distance"]:
             closest["end"]["distance"] = dist1
             closest["end"]["point"] = p
 
@@ -430,7 +427,7 @@ def get_connection_indices(t, node):
         # find end index
         closest = {"point": None, "distance": 1000000}
         for i in available_indices:
-            dist = rs.Distance(points[i], start_pnt) - offset
+            dist = rs.Distance(points[i], start_pnt) - 0.75*offset
             if dist < -offset*2:
                 break
             if abs(dist) < closest["distance"]:
@@ -608,7 +605,7 @@ def fill_curves_with_fermat_spiral(t, curves, start_pnt=None, wall_mode=False, w
                 if len(n.sub_nodes) > 1:
                     num_pnts = get_num_points(n.sub_nodes[0], extrude_width)
                     if n.type == 1:
-                        start_idx = None
+                        start_idx = 0
                         if start_pnt:
                             start_idx, d = closest_point(start_pnt, rs.DivideCurve(n.sub_nodes[0], num_pnts))
                         spiral, indices = spiral_contours(t, n.sub_nodes, start_idx)
@@ -623,6 +620,8 @@ def fill_curves_with_fermat_spiral(t, curves, start_pnt=None, wall_mode=False, w
                         start_idx, d = closest_point(start_pnt, rs.DivideCurve(n.sub_nodes[0], num_pnts))
                     indices = range(start_idx, len(points)) + range(0, start_idx)
                     n.fermat_spiral = [points[i] for i in indices]
+                    # treat node like a type 2 for finding connection indices
+                    n.type = 2
                 else:
                     print("Error: node with no curves in it at all", n)
 
@@ -646,7 +645,7 @@ def fill_curves_with_fermat_spiral(t, curves, start_pnt=None, wall_mode=False, w
             region_curve = rs.AddCurve(region)
             region_points = rs.DivideCurve(region_curve, int(rs.CurveLength(region_curve)/t.get_resolution()))
             if region_points==None: region_points = region
-            travel_paths = travel_paths + draw_points(t, region_points, 0, move_up=False)
+            travel_paths = travel_paths + draw_points(t, region_points, 0, move_up=(not wall_first))
             final_spiral = final_spiral + region_points
         if not wall_first:
             travel_paths = travel_paths + draw_points(t, outer_points, start_idx, move_up=False)
@@ -675,7 +674,7 @@ def fill_curves_with_spiral(t, curves, start_pnt=None, initial_offset=0.5):
         if len(node.sub_nodes) > 0:
             num_pnts = get_num_points(node.sub_nodes[0], float(t.get_extrude_width()))
             if node.type == 1:
-                start_idx = None
+                start_idx = 0
                 if start_pnt:
                     start_idx, d = closest_point(start_pnt, rs.DivideCurve(node.sub_nodes[0], num_pnts))
                 spiral, indices = spiral_contours(t, node.sub_nodes, start_idx)
