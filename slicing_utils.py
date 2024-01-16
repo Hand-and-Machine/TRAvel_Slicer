@@ -19,13 +19,14 @@ import graph_utils
 from graph_utils import *
 
 
-def draw_points(t, points, start_idx=0):
+def draw_points(t, points, start_idx=0, move_up=True):
     travel = []
     if len(points) > 1:
         t.pen_up()
         travel.append(rs.AddCurve([t.get_position(), points[start_idx]]))
-        t.lift(t.get_layer_height())
-        t.set_position(points[start_idx].X, points[start_idx].Y, t.get_position().Z)
+        if move_up:
+            t.lift(t.get_layer_height()/2)
+            t.set_position(points[start_idx].X, points[start_idx].Y, t.get_position().Z)
         t.set_position(points[start_idx].X, points[start_idx].Y, points[start_idx].Z)
         t.pen_down()
 
@@ -262,6 +263,11 @@ def connect_path(t, node, all_nodes, start_idx, spiral):
         final_idx = next(idx for idx in node.connection[node.parent.data] if idx != start_idx)
 
     marching_order, reverse = get_marching_order(node, start_idx, final_idx)
+
+    for x in [k for n in node.connection for k in node.connection[n].keys()]:
+        if x not in marching_order:
+            print(str(x)+" not in marching order.", marching_order)
+
     if not node.reverse:
         node.reverse = reverse
 
@@ -640,10 +646,10 @@ def fill_curves_with_fermat_spiral(t, curves, start_pnt=None, wall_mode=False, w
             region_curve = rs.AddCurve(region)
             region_points = rs.DivideCurve(region_curve, int(rs.CurveLength(region_curve)/t.get_resolution()))
             if region_points==None: region_points = region
-            travel_paths = travel_paths + draw_points(t, region_points, 0)
+            travel_paths = travel_paths + draw_points(t, region_points, 0, move_up=False)
             final_spiral = final_spiral + region_points
         if not wall_first:
-            travel_paths = travel_paths + draw_points(t, outer_points, start_idx)
+            travel_paths = travel_paths + draw_points(t, outer_points, start_idx, move_up=False)
             final_spiral = final_spiral + outer_points
 
     return travel_paths, final_spiral
@@ -794,6 +800,7 @@ def slice_vertical_and_fermat_fill(t, shape, wall_mode=False, walls=3, fill_bott
     start_point = path[0].data.sub_nodes[0].start_point
     for sup_node in path:
         for node in sup_node.data.sub_nodes:
+            print("Layer "+str(node.height))
             #if node == sup_node.data.sub_nodes[0]: start_point = node.start_point
             #else: start_point = t.get_position()
             start_point = t.get_position()
