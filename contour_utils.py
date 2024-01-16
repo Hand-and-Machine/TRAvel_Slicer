@@ -1,30 +1,34 @@
+import tree_utils
+from tree_utils import *
 import geometry_utils
 from geometry_utils import *
 
 def get_contours(t, curve, walls=3, wall_mode=False, initial_offset=0.5):
+    offset = float(t.get_extrude_width())
     if initial_offset > 0:
-        first_contours = get_isocontour(curve, float(t.get_extrude_width())*initial_offset)
+        first_contours = get_isocontour(curve, offset*initial_offset)
     else:
         first_contours = [curve]
 
+    root = Node("root")
+    root.depth = -1
+    isocontours = []
     if first_contours != None:
-        first_curve = first_contours[0]
-        if len(first_contours) > 0:
-            first_curve = sorted(first_contours, key=lambda x: get_area(x), reverse=True)[0]
-
-        root = {"guid": first_curve, "depth": 0, "children":[]}
-        isocontours = [] + [first_curve]
-        new_curves = get_isocontours(t, first_curve, root, wall_mode=wall_mode, walls=walls)
-        if new_curves:
-            isocontours = isocontours + new_curves
-    else:
-        isocontours = [curve]
-        root = {"guid": curve, "depth": 0, "children":[]}
+        for crv in first_contours:
+            node = root.add_child(crv)
+            node.is_wall = True
+            isocontours = isocontours + [crv]
+            new_curves = get_isocontours(t, crv, node, wall_mode=wall_mode, walls=walls)
+            if new_curves:
+                isocontours = isocontours + [crv for crv in new_curves if get_size(crv) > 1.5*offset]
+   # else:
+    #    node = root.add_child(curve)
+    #    isocontours = [curve]
     
     return root, isocontours
 
 
-def get_isocontours(t, curve, parent, recursion=0, wall_mode=False, walls=3):
+def get_isocontours(t, curve, parent, wall_mode=False, walls=3, recursion=0):
     if recursion > 30:
         print("Recursion exceeded limit")
         return []
@@ -33,12 +37,11 @@ def get_isocontours(t, curve, parent, recursion=0, wall_mode=False, walls=3):
         return []
     else:
         curves = [] + new_curves
-        new_depth = parent["depth"]+1
+        new_depth = parent.depth+1
         if (not wall_mode or (wall_mode and new_depth < walls)):
             for c in new_curves:
-                node = {"guid":c, "depth":new_depth, "parent":parent, "children":[]}
-                parent["children"].append(node)
-                new_new_curves = get_isocontours(t, c, node, recursion=recursion+1, wall_mode=wall_mode, walls=walls)
+                node = parent.add_child(c)
+                new_new_curves = get_isocontours(t, c, node, wall_mode=wall_mode, walls=walls, recursion=recursion+1)
                 for nc in new_new_curves:
                     curves.append(nc)
         return curves

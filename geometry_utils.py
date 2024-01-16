@@ -109,7 +109,7 @@ def get_shortest_indices(start, end, points):
         indices2 = range(end, start-1, -1)
     elif start < end:
         indices1 = range(start, end+1)
-        indices2 = range(start, 0, -1) + range(len(points)-1, end-1, -1)
+        indices2 = range(start, -1, -1) + range(len(points)-1, end-1, -1)
 
     points1 = [points[x] for x in indices1]
     points2 = [points[x] for x in indices2]
@@ -232,7 +232,7 @@ def split_curve(curve, split_point, tolerance):
                 indices2 = range(closest_idx, p-1, -1)
             elif p < closest_idx:
                 indices1 = range(p, closest_idx+1)
-                indices2 = range(p, 0, -1) + range(len(points)-1, closest_idx-1, -1)
+                indices2 = range(p, -1, -1) + range(len(points)-1, closest_idx-1, -1)
 
             points1 = [points[x] for x in indices1]
             points2 = [points[x] for x in indices2]

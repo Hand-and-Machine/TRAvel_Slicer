@@ -2,15 +2,28 @@ class Node:
     def __init__(self, data):
         self.data = data
         self.name = None
-        self.type = None
-        self.depth = None
-        self.height = None
+        self.type = 1
+        self.depth = 0
+        self.height = 0
         self.parent = None
+        self.is_wall = False
         self.overlap = []
+        self.reverse = False
         self.children = []
         self.sub_nodes = []
+        self.connection = {}
         self.start_point = None
         self.needs_support = None
+        self.fermat_spiral = None
+
+    def add_child(self, data):
+        new_node = Node(data)
+        self.children.append(new_node)
+        if len(self.children) > 1: self.type = 2
+        else: self.type = 1
+        new_node.parent = self
+        new_node.depth = self.depth + 1
+        return new_node
 
     def dfs(self, list=[]):
         if self not in list: list.append(self)

@@ -19,6 +19,24 @@ import graph_utils
 from graph_utils import *
 
 
+def draw_points(t, points, start_idx=0):
+    travel = []
+    if len(points) > 1:
+        t.pen_up()
+        travel.append(rs.AddCurve([t.get_position(), points[start_idx]]))
+        t.lift(t.get_layer_height())
+        t.set_position(points[start_idx].X, points[start_idx].Y, t.get_position().Z)
+        t.set_position(points[start_idx].X, points[start_idx].Y, points[start_idx].Z)
+        t.pen_down()
+
+        indices = range(start_idx, len(points)) + range(0, start_idx)
+        for p in indices:
+            t.set_position(points[p].X, points[p].Y, points[p].Z)
+        t.set_position(points[start_idx].X, points[start_idx].Y, points[start_idx].Z)
+
+    return travel
+
+
 def get_corner(t, outer_curve, inner_curve, points):
     offset = float(t.get_extrude_width())
 
@@ -95,6 +113,9 @@ def spiral_contours(t, isocontours, start_index):
                     closest["distance"] = dist
                     closest["point"] = j
         break_index = closest["point"]
+        if break_index == None:
+            print("Unable to find break_index on isocontour "+str(j+1)+" out of "+str(len(isocontours)))
+            break
         break_point = points[break_index]
 
         # append the points from the isocontour from start_point
@@ -181,116 +202,71 @@ def fermat_spiral(t, spiral, indices):
     return new_spiral
 
 
-def get_leaves(node):
-    if len(node["children"]) == 0:
-        return [node]
-    else:
-        leaves = []
-        for n in node["children"]:
-            leaves = leaves + get_leaves(n)
-        return leaves
-
-
-def get_branches(node):
-    if len(node["children"]) == 0:
-        return []
-    else:
-        branches = [node]
-        for n in node["children"]:
-            branches = branches + get_branches(n)
-        return branches
-
-
-def get_all_nodes(node):
-    if len(node["children"]) == 0:
-        return [node]
-    else:
-        all_nodes = [node]
-        for n in node["children"]:
-            all_nodes = all_nodes + get_all_nodes(n)
-        return all_nodes
-
-
-def set_node_types(node):
-    if len(node["children"]) == 0:
-        node["type"] = 1
-    if len(node["children"]) == 1:
-        node["type"] = 1
-        set_node_types(node["children"][0])
-    if len(node["children"]) > 1:
-        node["type"] = 2
-        for child in node["children"]:
-            set_node_types(child)
-
-
 def segment_tree(root):
-    region_root = {"guid":"0", "curves":[], "children":[]}
+    region_root = Node("0")
     fill_region(region_root, root, 0)
     return region_root
 
 
 def fill_region(region_node, node, idx):
-    # if the number of children is zero, append to curves
-    if(len(node["children"]) == 0):
+    if(len(node.children) == 0):
+        # if the number of children is zero, append to curves
+        region_node.sub_nodes.append(node.data)
+    elif len(node.children) == 1:
+        # if the number of children is one, proceed to
+        # the next node in the tree
         # add curve to the region
-        region_node["curves"].append(node["guid"])
-    # if the number of children is one, proceed to
-    # the next node in the tree
-    elif len(node["children"]) == 1:
-        # add curve to the region
-        region_node["curves"].append(node["guid"])
-        fill_region(region_node, node["children"][0], 0)
-    # if the number of children is greater than one,
-    # we have found a split and need to add a new node
-    elif len(node["children"]) > 1:
+        region_node.sub_nodes.append(node.data)
+        fill_region(region_node, node.children[0], 0)
+    elif len(node.children) > 1:
+        # if the number of children is greater than one,
+        # we have found a split and need to add a new node
         # add new region node and curve to the new region
         new_node = region_node
-        if len(region_node['curves']) > 0:
-            new_node = {"guid":region_node["guid"]+"_"+str(idx), "curves":[], "parent":region_node, "children":[]}
-            region_node["children"].append(new_node)
+        if len(region_node.sub_nodes) > 0:
+            new_node = region_node.add_child(region_node.data+"_"+str(idx))
 
-        new_node["curves"].append(node["guid"])
+        new_node.sub_nodes.append(node.data)
 
         idx = 0
-        for child in node["children"]:
-            if len(child['children']) > 1:
+        for child in node.children:
+            if len(child.children) > 1:
                 fill_region(new_node, child, idx)
                 idx = idx + 1
             else:
                 # add new region node
-                new_new_node = {"guid":new_node["guid"]+"_"+str(idx), "curves":[], "parent":new_node, "children":[]}
-                new_node["children"].append(new_new_node)
-
+                new_new_node = new_node.add_child(new_node.data+"_"+str(idx))
                 fill_region(new_new_node, child, 0)
                 idx = idx + 1
 
 
 def connect_spiralled_nodes(t, root):
     find_connections(t, root)
-    all_nodes = get_all_nodes(root)
-    all_nodes = {node['guid']: node for node in all_nodes}
+    all_nodes = root.get_all_nodes([])
+    all_nodes = {node.data: node for node in all_nodes}
 
     path = connect_path(t, root, all_nodes, 0, [])
     spiral = []
     for p in range(len(path)):
         node = all_nodes[path[p][0]]
         indices = get_marching_indices(node, path[p][1], path[p][2], path[p][3])
-        spiral = spiral + [node['fermat_spiral'][idx] for idx in indices]
+        if indices != None:
+            spiral = spiral + [node.fermat_spiral[idx] for idx in indices]
 
     return spiral
 
 
 def connect_path(t, node, all_nodes, start_idx, spiral):
-    final_idx = len(node['fermat_spiral'])-1
-    if node.get('parent'):
-        final_idx = next(idx for idx in node['connection'][node['parent']['guid']] if idx != start_idx)
+    final_idx = len(node.fermat_spiral)-1
+    if node.parent:
+        final_idx = next(idx for idx in node.connection[node.parent.data] if idx != start_idx)
 
     marching_order, reverse = get_marching_order(node, start_idx, final_idx)
-    if not node.get('reverse'):
-        node['reverse'] = reverse
+    if not node.reverse:
+        node.reverse = reverse
 
-    if node['children']:
-        everything_sorted = sorted([(k, n) for n in node['connection'] for k in node['connection'][n].keys()], key=lambda x: marching_order.index(x[0]))
+    if len(node.children)>0:
+        everything_sorted = sorted([(k, n) for n in node.connection for k in node.connection[n].keys()], key=lambda x: marching_order.index(x[0]))
         sorted_children = []
         for c in everything_sorted:
             include = True
@@ -301,33 +277,33 @@ def connect_path(t, node, all_nodes, start_idx, spiral):
             if include and c[0] != start_idx: sorted_children.append(c)
 
         for c in sorted_children:
-            if len(c[1]) > len(node['guid']):
+            if len(c[1]) > len(node.data):
                 child = all_nodes[c[1]]
                 end_idx = c[0]
 
                 # add path from node to child index to spiral
-                spiral.append((node['guid'], start_idx, end_idx, reverse))
+                spiral.append((node.data, start_idx, end_idx, reverse))
 
                 # recursively call connect_path on child
-                child_start_idx = node['connection'][child['guid']][end_idx]
+                child_start_idx = node.connection[child.data][end_idx]
                 spiral = connect_path(t, child, all_nodes, child_start_idx, spiral)
 
                 # find next start index for node
-                other_idx = next(idx for idx in child['connection'][node['guid']] if idx != child_start_idx)
-                start_idx = child['connection'][node['guid']][other_idx]
+                other_idx = next(idx for idx in child.connection[node.data] if idx != child_start_idx)
+                start_idx = child.connection[node.data][other_idx]
 
     # close off spiral with remaining portion of node's fermat spiral
-    spiral.append((node['guid'], start_idx, final_idx, reverse))
+    spiral.append((node.data, start_idx, final_idx, reverse))
 
     return spiral
 
 
 def get_marching_order(node, start, end):
-    points = node['fermat_spiral']
+    points = node.fermat_spiral
 
-    other_idx = len(node['fermat_spiral'])-1
-    if node.get('parent'):
-        other_idx = next(idx for idx in node['connection'][node['parent']['guid']] if idx != start)
+    other_idx = len(node.fermat_spiral)-1
+    if node.parent:
+        other_idx = next(idx for idx in node.connection[node.parent.data] if idx != start)
 
     marching_order = []
     reverse_marching_order = []
@@ -347,7 +323,7 @@ def get_marching_order(node, start, end):
 
 
 def get_marching_indices(node, start, end, reverse):
-    points = node['fermat_spiral']
+    points = node.fermat_spiral
 
     if reverse:
         if start > end:
@@ -366,11 +342,11 @@ def get_marching_indices(node, start, end, reverse):
 
 
 def find_connections(t, node):
-    for child in node["children"]:
+    for child in node.children:
         find_connections(t, child)
 
-    parent = node.get('parent')
-    if parent and parent.get('fermat_spiral'):
+    parent = node.parent
+    if parent!=None and parent.fermat_spiral!=None:
         connect_node_to_parent(t, node, parent)
 
 
@@ -379,7 +355,7 @@ def connect_node_to_parent(t, node, parent):
 
     node_start, node_end = get_connection_indices(t, node)
 
-    points = node['fermat_spiral']
+    points = node.fermat_spiral
     start_pnt = points[node_start]
     end_pnt = points[node_end]
 
@@ -393,7 +369,7 @@ def connect_node_to_parent(t, node, parent):
     pnt1 = rs.VectorAdd(start_pnt, vec)
     pnt2 = rs.VectorAdd(end_pnt, vec)
 
-    if rs.PointInPlanarClosedCurve(pnt1, node['curves'][0]) or rs.PointInPlanarClosedCurve(pnt2, node['curves'][0]):
+    if rs.PointInPlanarClosedCurve(pnt1, node.sub_nodes[0]) or rs.PointInPlanarClosedCurve(pnt2, node.sub_nodes[0]):
         vec = rs.VectorSubtract(end_pnt, start_pnt)
         vec = rs.VectorScale(rs.VectorUnitize(rs.VectorRotate(vec, -direction, [0, 0, 1])), offset)
         pnt1 = rs.VectorAdd(start_pnt, vec)
@@ -402,7 +378,7 @@ def connect_node_to_parent(t, node, parent):
     # search parent node points for points
     # closest to computed intersection
     closest = {"start": {"point": None, "distance": 1000000}, "end": {"point": None, "distance": 1000000}}
-    points = parent['fermat_spiral']
+    points = parent.fermat_spiral
     for p in range(len(points)):
         dist = rs.Distance(points[p], pnt1)
         if dist < closest["start"]["distance"]:
@@ -416,30 +392,25 @@ def connect_node_to_parent(t, node, parent):
             closest["end"]["distance"] = dist1
             closest["end"]["point"] = p
 
-    parent_start = closest['start']['point']
-    parent_end = closest['end']['point']
+    parent_start = closest["start"]["point"]
+    parent_end = closest["end"]["point"]
 
-    if not parent.get('connection'):
-        parent['connection'] = {}
-    parent['connection'][node['guid']] = { parent_start: node_start, parent_end: node_end }
-
-    if not node.get('connection'):
-        node['connection'] = {}
-    node['connection'][parent['guid']] = { node_start: parent_start, node_end: parent_end }
+    parent.connection[node.data] = { parent_start: node_start, parent_end: node_end }
+    node.connection[parent.data] = { node_start: parent_start, node_end: parent_end }
 
 
 def get_connection_indices(t, node):
     offset = float(t.get_extrude_width())
 
     start_index = 0
-    end_index = len(node['fermat_spiral']) - 1
+    end_index = len(node.fermat_spiral) - 1
 
-    if node['type'] == 2:
-        points = node['fermat_spiral']
+    if node.type == 2:
+        points = node.fermat_spiral
         # verify that we haven't already tried to connect to a node
         # at those indices, otherwise move along curve to a new spot
         available_indices = range(len(points))
-        connections = node.get('connection')
+        connections = node.connection
         if connections:
             connection = [connections[n].keys() for n in connections]
             for c in connection:
@@ -601,56 +572,84 @@ def get_edge_tuples(graph):
     return sorted(ordered_edges, key=lambda x: x[2], reverse=True)
 
 
-def fill_curves_with_fermat_spiral(t, curves, start_pnt=None, wall_mode=False, walls=3, initial_offset=0.5):
+def fill_curves_with_fermat_spiral(t, curves, start_pnt=None, wall_mode=False, walls=3, wall_first=False, initial_offset=0.5):
+    extrude_width = float(t.get_extrude_width())
+
     # connect curves if given more than one
     curve = curves[0]
     if len(curves) > 1:
-        curve = connect_curves(curves, float(t.get_extrude_width())/8)
+        curve = connect_curves(curves, extrude_width/8)
 
     # slice the shape
     # Generate isocontours
     root, isocontours = get_contours(t, curve, walls=walls, wall_mode=wall_mode, initial_offset=initial_offset)
 
+    final_spiral = []
     travel_paths = []
 
-    region_tree = segment_tree(root)
-    set_node_types(region_tree)
-    all_nodes = get_all_nodes(region_tree)
-
     # Spiralling Regions
-    for n in all_nodes:
-        if len(n.get('curves')) > 0:
-            num_pnts = get_num_points(n['curves'][0], float(t.get_extrude_width()))
-            if n['type'] == 1:
-                start_idx = None
-                if start_pnt:
-                    start_idx, d = closest_point(start_pnt, rs.DivideCurve(n['curves'][0], num_pnts))
-                spiral, indices = spiral_contours(t, n["curves"], start_idx)
-                n["fermat_spiral"] = fermat_spiral(t, spiral, indices)
-            elif n['type'] == 2:
-                n['fermat_spiral'] = rs.DivideCurve(n["curves"][0], num_pnts)
-        else:
-            print("Error: node with no curves in it at all", n)
+    # if generating the first isocontour resulted in multiple
+    # regions, we have to handle them separately
+    count = 0
+    for node in root.children:
+        # there may be multiple inner regions within the outermost wall due to initial_offset
+        count = count+1
+        inner_regions = []
+        for child in node.children:
+            region_tree = segment_tree(child)
+            all_nodes = region_tree.get_all_nodes([])
+            for n in all_nodes:
+                if len(n.sub_nodes) > 1:
+                    num_pnts = get_num_points(n.sub_nodes[0], extrude_width)
+                    if n.type == 1:
+                        start_idx = None
+                        if start_pnt:
+                            start_idx, d = closest_point(start_pnt, rs.DivideCurve(n.sub_nodes[0], num_pnts))
+                        spiral, indices = spiral_contours(t, n.sub_nodes, start_idx)
+                        n.fermat_spiral = fermat_spiral(t, spiral, indices)
+                    elif n.type == 2:
+                        n.fermat_spiral = rs.DivideCurve(n.sub_nodes[0], num_pnts)
+                elif len(n.sub_nodes) == 1:
+                    num_pnts = get_num_points(n.sub_nodes[0], extrude_width)
+                    points = rs.DivideCurve(n.sub_nodes[0], num_pnts)
+                    start_idx = 0
+                    if start_pnt:
+                        start_idx, d = closest_point(start_pnt, rs.DivideCurve(n.sub_nodes[0], num_pnts))
+                    indices = range(start_idx, len(points)) + range(0, start_idx)
+                    n.fermat_spiral = [points[i] for i in indices]
+                else:
+                    print("Error: node with no curves in it at all", n)
 
-    # Connect Spiralled Regions
-    final_points = connect_spiralled_nodes(t, region_tree)
-    final_curve = rs.AddCurve(final_points)
-    final_spiral = rs.DivideCurve(final_curve, int(rs.CurveLength(final_curve)/t.get_resolution()))
+            if len(all_nodes) > 1:
+                inner_regions.append(connect_spiralled_nodes(t, region_tree))
+            elif len(all_nodes) == 1:
+                inner_regions.append(all_nodes[0].fermat_spiral)
+        
+        outer_wall = node.data
+        outer_points = rs.DivideCurve(outer_wall, int(rs.CurveLength(outer_wall)/t.get_resolution()))
+        if outer_points == None:
+            outer_points = rs.DivideCurve(outer_wall, get_num_points(outer_wall, extrude_width))
 
-    t.pen_up()
-    travel_paths.append(rs.AddCurve([t.get_position(), final_spiral[0]]))
-    t.lift(t.get_layer_height())
-    t.set_position(final_spiral[0].X, final_spiral[0].Y, t.get_position().Z)
-    t.set_position(final_spiral[0].X, final_spiral[0].Y, final_spiral[0].Z)
-    t.pen_down()
-    for p in final_spiral:
-        t.set_position(p.X, p.Y, p.Z)
-    t.set_position(final_spiral[0].X, final_spiral[0].Y, final_spiral[0].Z)
+        start_idx = 0
+        if start_pnt: start_idx, d = closest_point(start_pnt, outer_points)
+
+        if wall_first:
+            travel_paths = travel_paths + draw_points(t, outer_points, start_idx)
+            final_spiral = final_spiral + outer_points
+        for region in inner_regions:
+            region_curve = rs.AddCurve(region)
+            region_points = rs.DivideCurve(region_curve, int(rs.CurveLength(region_curve)/t.get_resolution()))
+            if region_points==None: region_points = region
+            travel_paths = travel_paths + draw_points(t, region_points, 0)
+            final_spiral = final_spiral + region_points
+        if not wall_first:
+            travel_paths = travel_paths + draw_points(t, outer_points, start_idx)
+            final_spiral = final_spiral + outer_points
 
     return travel_paths, final_spiral
 
 
-def fill_curves_with_spiral(t, curves, start_pnt=None):
+def fill_curves_with_spiral(t, curves, start_pnt=None, initial_offset=0.5):
     # connect curves if given more than one
     curve = curves[0]
     if len(curves) > 1:
@@ -658,33 +657,32 @@ def fill_curves_with_spiral(t, curves, start_pnt=None):
 
     # slice the shape
     # Generate isocontours
-    root, isocontours = get_contours(t, curve)
+    root, isocontours = get_contours(t, curve, initial_offset=initial_offset)
 
     region_tree = segment_tree(root)
-    set_node_types(region_tree)
-    all_nodes = get_all_nodes(region_tree)
+    all_nodes = region_tree.get_all_nodes([])
 
     # Spiral Regions
     travel_paths = []
     for node in all_nodes:
-        if 'root' in node['curves']: node['curves'].remove('root')
-        if len(node['curves']) > 0:
-            num_pnts = get_num_points(node['curves'][0], float(t.get_extrude_width()))
-            if node['type'] == 1:
+        if 'root' in node.sub_nodes: node.sub_nodes.remove('root')
+        if len(node.sub_nodes) > 0:
+            num_pnts = get_num_points(node.sub_nodes[0], float(t.get_extrude_width()))
+            if node.type == 1:
                 start_idx = None
                 if start_pnt:
-                    start_idx, d = closest_point(start_pnt, rs.DivideCurve(node['curves'][0], num_pnts))
-                spiral, indices = spiral_contours(t, node["curves"], start_idx)
+                    start_idx, d = closest_point(start_pnt, rs.DivideCurve(node.sub_nodes[0], num_pnts))
+                spiral, indices = spiral_contours(t, node.sub_nodes, start_idx)
                 t.pen_up()
                 travel_paths.append(rs.AddCurve([t.get_position(), spiral[0]]))
                 t.set_position(spiral[0].X, spiral[0].Y, spiral[0].Z)
                 t.pen_down()
                 for p in spiral:
                     t.set_position(p.X, p.Y, p.Z)
-            elif node['type'] == 2:
-                points = rs.DivideCurve(node["curves"][0], num_pnts)
+            elif node.type == 2:
+                points = rs.DivideCurve(node.sub_nodes[0], num_pnts)
                 t.pen_up()
-                travel_paths.append(rs.AddCurve([t.get_position(), spiral[0]]))
+                travel_paths.append(rs.AddCurve([t.get_position(), points[0]]))
                 t.set_position(points[0].X, points[0].Y, t.get_position().Z)
                 t.set_position(points[0].X, points[0].Y, points[0].Z)
                 t.pen_down()
@@ -741,25 +739,15 @@ def slice_fermat_fill(t, shape, start_pnt=None, start=0, end=None, wall_mode=Fal
 
         for crvs in curve_groups:
             if start_pnt == None: start_pnt = t.get_position()
-            try:
-                if not wall_mode or (wall_mode and fill_bottom and l<bottom_layers):
-                    travel_paths = travel_paths + fill_curves_with_fermat_spiral(t, crvs, start_pnt=start_pnt, initial_offset=initial_offset)[0]
-                else:
-                    travel_paths = travel_paths + fill_curves_with_fermat_spiral(t, crvs, start_pnt=start_pnt, wall_mode=wall_mode, walls=walls, initial_offset=initial_offset)[0]
-            except:
-                try:
-                    print("Unable to fermat spiral layer, generating contours: "+str(l))
-                    if not wall_mode or (wall_mode and fill_bottom and l<bottom_layers):
-                        travel_paths = travel_paths + fill_curves_with_contours(t, crvs, start_pnt=start_pnt, initial_offset=initial_offset)
-                    else:
-                        travel_paths = travel_paths + fill_curves_with_contours(t, crvs, start_pnt=start_pnt, wall_mode=wall_mode, walls=walls, initial_offset=initial_offset)
-                except:
-                    print("Error: unable to slice layer "+str(l))
+            if not wall_mode or (wall_mode and fill_bottom and l<bottom_layers):
+                travel_paths = travel_paths + fill_curves_with_fermat_spiral(t, crvs, start_pnt=start_pnt, initial_offset=initial_offset)[0]
+            else:
+                travel_paths = travel_paths + fill_curves_with_fermat_spiral(t, crvs, start_pnt=start_pnt, wall_mode=wall_mode, walls=walls, initial_offset=initial_offset)[0]
 
     return travel_paths
 
 
-def slice_spiral_fill(t, shape, start=0, end=None):
+def slice_spiral_fill(t, shape, start=0, end=None, initial_offset=0.5):
     travel_paths = []
     layers = int(math.floor(get_shape_height(shape) / t.get_layer_height())) + 1
 
@@ -771,7 +759,7 @@ def slice_spiral_fill(t, shape, start=0, end=None):
         curve_groups = get_curves(shape, l*t.get_layer_height())
 
         for crvs in curve_groups:
-            travel_paths = travel_paths + fill_curves_with_spiral(t, crvs, start_pnt=t.get_position())
+            travel_paths = travel_paths + fill_curves_with_spiral(t, crvs, start_pnt=t.get_position(), initial_offset=initial_offset)
 
     return travel_paths
 
@@ -801,30 +789,20 @@ def slice_vertical_and_fermat_fill(t, shape, wall_mode=False, walls=3, fill_bott
 
     travel_paths = []
     center_points = []
-    #try:
     tree, path, center_points, bboxes, edges = best_vertical_path(t, shape)
 
     start_point = path[0].data.sub_nodes[0].start_point
     for sup_node in path:
         for node in sup_node.data.sub_nodes:
+            print("Layer "+str(node.height))
             #if node == sup_node.data.sub_nodes[0]: start_point = node.start_point
             #else: start_point = t.get_position()
             start_point = t.get_position()
             for curves in node.data:
-                #try:
-                    if not wall_mode or (wall_mode and fill_bottom and node.height<bottom_layers):
-                        travel_paths = travel_paths + fill_curves_with_fermat_spiral(t, curves, start_pnt=start_point, initial_offset=initial_offset)[0]
-                    else:
-                        travel_paths = travel_paths + fill_curves_with_fermat_spiral(t, curves, start_pnt=start_point, wall_mode=wall_mode, walls=walls, initial_offset=initial_offset)[0]
-                #except Exception as err:
-                    #print("Failed to fermat spiral layer "+str(node.height), err)
-                    #if not wall_mode or (wall_mode and fill_bottom and node.height<bottom_layers):
-                    #    travel_paths = travel_paths + fill_curves_with_contours(t, curves, start_pnt=start_point, initial_offset=initial_offset)
-                    #else:
-                    #    travel_paths = travel_paths + fill_curves_with_contours(t, curves, start_pnt=start_point, wall_mode=wall_mode, walls=walls, initial_offset=initial_offset)
-    #except Exception as error:
-        #print("Failed to find vertical travel path minimization, printing layer by layer. "+str(error))
-        #travel_paths = travel_paths + slice_fermat_fill(t, shape, wall_mode=wall_mode, walls=walls, fill_bottom=fill_bottom, bottom_layers=bottom_layers)
+                if not wall_mode or (wall_mode and fill_bottom and node.height<bottom_layers):
+                    travel_paths = travel_paths + fill_curves_with_fermat_spiral(t, curves, start_pnt=start_point, initial_offset=initial_offset)[0]
+                else:
+                    travel_paths = travel_paths + fill_curves_with_fermat_spiral(t, curves, start_pnt=start_point, wall_mode=wall_mode, walls=walls, initial_offset=initial_offset)[0]
 
     print("Full path generation: "+str(round(time.time()-overall_start_time, 3))+" seconds")
 
@@ -839,29 +817,31 @@ def slice_2_half_D_fermat(t, curves, layers=3, wall_mode=False, walls=3, fill_bo
     if len(group) > 1:
         curve = connect_curves(curves, float(t.get_extrude_width())/8)
 
-    first_curve = sorted(get_isocontour(curve, float(t.get_extrude_width())*initial_offset), key=lambda x: get_area(x), reverse=True)[0]
-    root = {"guid": first_curve, "depth": 0, "children":[]}
-    isocontours = [] + [first_curve]
-    new_curves = get_isocontours(t, first_curve, root, wall_mode=wall_mode, walls=walls)
-    if new_curves:
-        isocontours = isocontours + new_curves
+    first_contours = get_isocontour(curve, float(t.get_extrude_width())*initial_offset)
+    root = Node('root')
+    root.depth = -1
+    isocontours = first_contours
+    for crv in first_contours:
+        node = root.add_child(crv)
+        new_curves = get_isocontours(t, crv, node, wall_mode=wall_mode, walls=walls)
+        if new_curves:
+            isocontours = isocontours + new_curves
 
     travel_paths = []
 
     region_tree = segment_tree(root)
-    set_node_types(region_tree)
-    all_nodes = get_all_nodes(region_tree)
+    all_nodes = region_tree.get_all_nodes([])
 
     for l in range(layers):
         for n in all_nodes:
-            if len(n.get('curves')) > 0:
-                num_pnts = get_num_points(n['curves'][0], float(t.get_extrude_width()))
-                if n['type'] == 1:
-                    start_idx, d = closest_point(t.get_position(), rs.DivideCurve(n['curves'][0], num_pnts))
-                    spiral, indices = spiral_contours(t, n["curves"], start_idx)
-                    n["fermat_spiral"] = fermat_spiral(t, spiral, indices)
-                elif n['type'] == 2:
-                    n['fermat_spiral'] = rs.DivideCurve(n["curves"][0], num_pnts)
+            if len(n.sub_nodes) > 0:
+                num_pnts = get_num_points(n.sub_nodes[0], float(t.get_extrude_width()))
+                if n.type == 1:
+                    start_idx, d = closest_point(t.get_position(), rs.DivideCurve(n.sub_nodes[0], num_pnts))
+                    spiral, indices = spiral_contours(t, n.sub_nodes, start_idx)
+                    n.fermat_spiral = fermat_spiral(t, spiral, indices)
+                elif n.type == 2:
+                    n.fermat_spiral = rs.DivideCurve(n.sub_nodes[0], num_pnts)
             else:
                 print("Error: node with no curves in it at all", n)
 
