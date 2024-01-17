@@ -808,10 +808,12 @@ def slice_vertical_and_fermat_fill(t, shape, wall_mode=False, walls=3, fill_bott
     center_points = []
     tree, path, center_points, bboxes, edges = best_vertical_path(t, shape)
 
+    fermat_time = time.time()
+
     start_point = path[0].data.sub_nodes[0].start_point
     for sup_node in path:
         for node in sup_node.data.sub_nodes:
-            print("Layer "+str(node.height))
+            #print("Layer "+str(node.height))
             start_point = t.get_position()
             for curves in node.data:
                 if not wall_mode or (wall_mode and fill_bottom and node.height<bottom_layers):
@@ -819,6 +821,7 @@ def slice_vertical_and_fermat_fill(t, shape, wall_mode=False, walls=3, fill_bott
                 else:
                     travel_paths = travel_paths + fill_curves_with_fermat_spiral(t, curves, start_pnt=start_point, wall_mode=wall_mode, walls=walls, initial_offset=initial_offset)[0]
 
+    print("Fermat Spiraling time: "+str(round(time.time()-fermat_time, 3))+" seconds")
     print("Full path generation: "+str(round(time.time()-overall_start_time, 3))+" seconds")
 
     return travel_paths, tree, path, center_points, bboxes, edges
