@@ -83,11 +83,6 @@ def spiral_contours(t, isocontours, start_index=0):
     num_pnts = get_num_points(isocontours[0], offset)
     points = rs.DivideCurve(isocontours[0], num_pnts)
 
-    # choose appropriate starting index on outermost contour
-    # get center point of innermost contour to compare
-    #if not start_index:
-        #start_index = get_corner(t, isocontours[0], isocontours[-1], points)
-
     # spiral region
     start_point = None
     spiral_contour_indices = []
@@ -96,7 +91,7 @@ def spiral_contours(t, isocontours, start_index=0):
 
         # get break point on isocontour for connecting spiral
         marching_order = range(start_index, -1, -1) + range(len(points)-1, start_index, -1)
-        closest = {"point": None, "distance": 1000000}
+        closest = {"point": None, "length":1000000, "distance": 1000000}
 
         for j in marching_order:
             if j != start_index:
@@ -111,8 +106,11 @@ def spiral_contours(t, isocontours, start_index=0):
                         indices1 = range(j, start_index+1)
                         indices2 = range(j, -1, -1) + range(len(points)-1, start_index-1, -1)
 
-                    if len(indices2) > len(indices1):
+                    length1 = len(indices1)
+                    length2 = len(indices2)
+                    if length2 > length1 and length2 < closest["length"]:
                         closest["distance"] = dist
+                        closest["length"] = length2
                         closest["point"] = j
         break_index = closest["point"]
         if break_index == None:
@@ -215,9 +213,8 @@ def fill_region(region_node, node, idx):
         # if the number of children is zero, append to curves
         region_node.sub_nodes.append(node.data)
     elif len(node.children) == 1:
-        # if the number of children is one, proceed to
-        # the next node in the tree
-        # add curve to the region
+        # if the number of children is one, proceed to the next node
+        # in the tree and add curve to the region
         region_node.sub_nodes.append(node.data)
         fill_region(region_node, node.children[0], 0)
     elif len(node.children) > 1:
@@ -372,7 +369,8 @@ def connect_node_to_parent(t, node, parent):
     pnt1 = rs.VectorAdd(start_pnt, vec)
     pnt2 = rs.VectorAdd(end_pnt, vec)
 
-    if rs.PointInPlanarClosedCurve(pnt1, node.sub_nodes[0]) or rs.PointInPlanarClosedCurve(pnt2, node.sub_nodes[0]):
+    if (rs.PointInPlanarClosedCurve(pnt1, node.sub_nodes[0]) or rs.PointInPlanarClosedCurve(pnt2, node.sub_nodes[0])):
+        # collision occurred, switching directions
         vec = rs.VectorSubtract(end_pnt, start_pnt)
         vec = rs.VectorScale(rs.VectorUnitize(rs.VectorRotate(vec, -direction, [0, 0, 1])), offset)
         pnt1 = rs.VectorAdd(start_pnt, vec)
@@ -391,12 +389,17 @@ def connect_node_to_parent(t, node, parent):
     for p in range(len(points)):
         dist1 = rs.Distance(points[p], pnt2)
         dist2 = rs.Distance(points[p], pnt1) - offset*0.75
-        if abs(dist2) <= offset and dist1 < closest["end"]["distance"]:
+        if (p != closest["start"]["point"]
+            and abs(dist2) <= offset*0.75
+            and dist1 < closest["end"]["distance"]):
             closest["end"]["distance"] = dist1
             closest["end"]["point"] = p
 
     parent_start = closest["start"]["point"]
     parent_end = closest["end"]["point"]
+
+    if parent_start == None or parent_end == None:
+        print("Did not find suitable connection to outer contour", node_start, node_end, parent_start, parent_end)
 
     parent.connection[node.data] = { parent_start: node_start, parent_end: node_end }
     node.connection[parent.data] = { node_start: parent_start, node_end: parent_end }
@@ -408,7 +411,7 @@ def get_connection_indices(t, node):
     start_index = 0
     end_index = len(node.fermat_spiral) - 1
 
-    if node.type == 2:
+    if node.type == 2 or len(node.sub_nodes) == 1:
         points = node.fermat_spiral
         # verify that we haven't already tried to connect to a node
         # at those indices, otherwise move along curve to a new spot
@@ -428,8 +431,6 @@ def get_connection_indices(t, node):
         closest = {"point": None, "distance": 1000000}
         for i in available_indices:
             dist = rs.Distance(points[i], start_pnt) - 0.75*offset
-            if dist < -offset*2:
-                break
             if abs(dist) < closest["distance"]:
                 closest["distance"] = abs(dist)
                 closest["point"] = i
@@ -593,10 +594,8 @@ def fill_curves_with_fermat_spiral(t, curves, start_pnt=None, wall_mode=False, w
     # Spiralling Regions
     # if generating the first isocontour resulted in multiple
     # regions, we have to handle them separately
-    count = 0
     for node in root.children:
         # there may be multiple inner regions within the outermost wall due to initial_offset
-        count = count+1
         inner_regions = []
         for child in node.children:
             region_tree = segment_tree(child)
@@ -606,8 +605,11 @@ def fill_curves_with_fermat_spiral(t, curves, start_pnt=None, wall_mode=False, w
                     num_pnts = get_num_points(n.sub_nodes[0], extrude_width)
                     if n.type == 1:
                         start_idx = 0
-                        if start_pnt:
-                            start_idx, d = closest_point(start_pnt, rs.DivideCurve(n.sub_nodes[0], num_pnts))
+                        if n.parent and n.parent.type == 2:
+                            start_idx = get_corner(t, n.sub_nodes[0], n.sub_nodes[-1], rs.DivideCurve(n.sub_nodes[0], num_pnts))
+                        else:
+                            if start_pnt:
+                                start_idx, d = closest_point(start_pnt, rs.DivideCurve(n.sub_nodes[0], num_pnts))
                         spiral, indices = spiral_contours(t, n.sub_nodes, start_idx)
                         n.fermat_spiral = fermat_spiral(t, spiral, indices)
                     elif n.type == 2:
@@ -620,8 +622,6 @@ def fill_curves_with_fermat_spiral(t, curves, start_pnt=None, wall_mode=False, w
                         start_idx, d = closest_point(start_pnt, rs.DivideCurve(n.sub_nodes[0], num_pnts))
                     indices = range(start_idx, len(points)) + range(0, start_idx)
                     n.fermat_spiral = [points[i] for i in indices]
-                    # treat node like a type 2 for finding connection indices
-                    n.type = 2
                 else:
                     print("Error: node with no curves in it at all", n)
 
@@ -654,45 +654,53 @@ def fill_curves_with_fermat_spiral(t, curves, start_pnt=None, wall_mode=False, w
     return travel_paths, final_spiral
 
 
-def fill_curves_with_spiral(t, curves, start_pnt=None, initial_offset=0.5):
+def fill_curves_with_spiral(t, curves, start_pnt=None, wall_first=False, initial_offset=0.5):
+    extrude_width = float(t.get_extrude_width())
+
     # connect curves if given more than one
     curve = curves[0]
     if len(curves) > 1:
-        curve = connect_curves(curves, float(t.get_extrude_width())/8)
+        curve = connect_curves(curves, extrude_width/8)
 
     # slice the shape
     # Generate isocontours
     root, isocontours = get_contours(t, curve, initial_offset=initial_offset)
 
-    region_tree = segment_tree(root)
-    all_nodes = region_tree.get_all_nodes([])
-
-    # Spiral Regions
     travel_paths = []
-    for node in all_nodes:
-        if 'root' in node.sub_nodes: node.sub_nodes.remove('root')
-        if len(node.sub_nodes) > 0:
-            num_pnts = get_num_points(node.sub_nodes[0], float(t.get_extrude_width()))
-            if node.type == 1:
-                start_idx = 0
-                if start_pnt:
-                    start_idx, d = closest_point(start_pnt, rs.DivideCurve(node.sub_nodes[0], num_pnts))
-                spiral, indices = spiral_contours(t, node.sub_nodes, start_idx)
-                t.pen_up()
-                travel_paths.append(rs.AddCurve([t.get_position(), spiral[0]]))
-                t.set_position(spiral[0].X, spiral[0].Y, spiral[0].Z)
-                t.pen_down()
-                for p in spiral:
-                    t.set_position(p.X, p.Y, p.Z)
-            elif node.type == 2:
-                points = rs.DivideCurve(node.sub_nodes[0], num_pnts)
-                t.pen_up()
-                travel_paths.append(rs.AddCurve([t.get_position(), points[0]]))
-                t.set_position(points[0].X, points[0].Y, t.get_position().Z)
-                t.set_position(points[0].X, points[0].Y, points[0].Z)
-                t.pen_down()
-                for p in points:
-                    t.set_position(p.X, p.Y, p.Z)
+
+    for node in root.children:
+        outer_wall = node.data
+        outer_points = rs.DivideCurve(outer_wall, int(rs.CurveLength(outer_wall)/t.get_resolution()))
+        if outer_points == None:
+            outer_points = rs.DivideCurve(outer_wall, get_num_points(outer_wall, extrude_width))
+
+        if wall_first:
+            start_idx = 0
+            if start_pnt: start_idx, d = closest_point(start_pnt, outer_points)
+            travel_paths = travel_paths + draw_points(t, outer_points, start_idx)
+
+        for child in node.children:
+            region_tree = segment_tree(child)
+            all_nodes = region_tree.get_all_nodes([])
+
+            # Spiral Regions
+            for node in all_nodes:
+                if len(node.sub_nodes) > 0:
+                    num_pnts = get_num_points(node.sub_nodes[0], float(t.get_extrude_width()))
+                    if node.type == 1:
+                        start_idx = 0
+                        if start_pnt:
+                            start_idx, d = closest_point(start_pnt, rs.DivideCurve(node.sub_nodes[0], num_pnts))
+                        spiral, indices = spiral_contours(t, node.sub_nodes, start_idx)
+                        travel_paths = travel_paths + draw_points(t, spiral, start_idx=start_idx, move_up=False)
+                    elif node.type == 2:
+                        points = rs.DivideCurve(node.sub_nodes[0], num_pnts)
+                        travel_paths = travel_paths + draw_points(t, points, start_idx=start_idx, move_up=False)
+        
+        if not wall_first:
+            start_idx = 0
+            if start_pnt: start_idx, d = closest_point(start_pnt, outer_points)
+            travel_paths = travel_paths + draw_points(t, outer_points, start_idx, move_up=False)
 
     return travel_paths
 
@@ -752,7 +760,7 @@ def slice_fermat_fill(t, shape, start_pnt=None, start=0, end=None, wall_mode=Fal
     return travel_paths
 
 
-def slice_spiral_fill(t, shape, start=0, end=None, initial_offset=0.5):
+def slice_spiral_fill(t, shape, start_pnt=None, start=0, end=None, wall_mode=False, walls=3, fill_bottom=False, bottom_layers=3, initial_offset=0.5):
     travel_paths = []
     layers = int(math.floor(get_shape_height(shape) / t.get_layer_height())) + 1
 
@@ -764,7 +772,11 @@ def slice_spiral_fill(t, shape, start=0, end=None, initial_offset=0.5):
         curve_groups = get_curves(shape, l*t.get_layer_height())
 
         for crvs in curve_groups:
-            travel_paths = travel_paths + fill_curves_with_spiral(t, crvs, start_pnt=t.get_position(), initial_offset=initial_offset)
+            if start_pnt == None: start_pnt = t.get_position()
+            if not wall_mode or (wall_mode and fill_bottom and l<bottom_layers):
+                travel_paths = travel_paths + fill_curves_with_spiral(t, crvs, start_pnt=start_pnt, initial_offset=initial_offset)
+            else:
+                travel_paths = travel_paths + fill_curves_with_spiral(t, crvs, start_pnt=start_pnt, wall_mode=wall_mode, walls=walls, initial_offset=initial_offset)
 
     return travel_paths
 
@@ -800,8 +812,6 @@ def slice_vertical_and_fermat_fill(t, shape, wall_mode=False, walls=3, fill_bott
     for sup_node in path:
         for node in sup_node.data.sub_nodes:
             print("Layer "+str(node.height))
-            #if node == sup_node.data.sub_nodes[0]: start_point = node.start_point
-            #else: start_point = t.get_position()
             start_point = t.get_position()
             for curves in node.data:
                 if not wall_mode or (wall_mode and fill_bottom and node.height<bottom_layers):

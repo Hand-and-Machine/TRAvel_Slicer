@@ -71,8 +71,8 @@ def get_winding_order(curve, points, offset):
         index = i*(len(points)/4)
 
         tangent = rs.VectorSubtract(points[index+1], points[index-1])
-        pnt_cw = rs.VectorAdd(points[index], rs.VectorScale(rs.VectorUnitize(rs.VectorRotate(tangent, -90, [0, 0, 1])), offset/10))
-        pnt_ccw = rs.VectorAdd(points[index], rs.VectorScale(rs.VectorUnitize(rs.VectorRotate(tangent, 90, [0, 0, 1])), offset/10))
+        pnt_cw = rs.VectorAdd(points[index], rs.VectorScale(rs.VectorUnitize(rs.VectorRotate(tangent, -90, [0, 0, 1])), offset/20))
+        pnt_ccw = rs.VectorAdd(points[index], rs.VectorScale(rs.VectorUnitize(rs.VectorRotate(tangent, 90, [0, 0, 1])), offset/20))
 
         direction = None
         if rs.PointInPlanarClosedCurve(pnt_cw, curve):
@@ -285,8 +285,8 @@ class Grid:
 
         points = []
 
-        for x in range(max(0, x_idx-1), min(self.max_x_idx, x_idx+2)):
-            for y in range(max(0, y_idx-1), min(self.max_y_idx, y_idx+2)):
+        for x in range(max(0, x_idx-1), min(self.max_x_idx+1, x_idx+2)):
+            for y in range(max(0, y_idx-1), min(self.max_y_idx+1, y_idx+2)):
                 points = points + self.grid[x][y]
         
         return points
