@@ -18,21 +18,29 @@ from contour_utils import *
 import graph_utils
 from graph_utils import *
 
+max_z = 0
 
 def draw_points(t, points, start_idx=0, move_up=True):
+    global max_z
+
     travel = []
     if len(points) > 1:
         t.pen_up()
         travel.append(rs.AddCurve([t.get_position(), points[start_idx]]))
         if move_up:
-            t.lift(t.get_layer_height()/2)
-            t.set_position(points[start_idx].X, points[start_idx].Y, t.get_position().Z)
+            pos = t.get_position()
+            z = float(t.get_layer_height())/2
+            if rs.Distance(pos, points[start_idx]) > max(z*4, float(t.get_extrude_width())*2):
+                z = max_z
+            t.set_position(pos.X, pos.Y, z)
+            t.set_position(points[start_idx].X, points[start_idx].Y, z)
         t.set_position(points[start_idx].X, points[start_idx].Y, points[start_idx].Z)
         t.pen_down()
 
         indices = range(start_idx, len(points)) + range(0, start_idx)
         for p in indices:
             t.set_position(points[p].X, points[p].Y, points[p].Z)
+            if points[p].Z > max_z: max_z = points[p].Z
         t.set_position(points[start_idx].X, points[start_idx].Y, points[start_idx].Z)
 
     return travel

@@ -17,8 +17,8 @@ from geometry_utils import *
 
 global nozzle_width
 global nozzle_height
-nozzle_width = 8
-nozzle_height = 30
+nozzle_width = 6.5
+nozzle_height = 20
 
 
 # My vertical path finding code
@@ -27,6 +27,8 @@ def best_vertical_path(t, shape):
 
     global overlap
     overlap = {}
+    global overlap_super
+    overlap_super = {}
 
     # center_points is a visualization variable for debugging,
     # it isn't used further in the code for calculations
@@ -175,18 +177,16 @@ def build_vertical_tree(t, shape):
         center_point = rs.CreatePoint(center_point.X/(len(curve_groups) + 1), center_point.Y/(len(curve_groups) + 1), l*t.get_layer_height())
         center_points.append(center_point)
 
-        # combine separated curves if their bounding boxes overlap by the nozzle_width
+        # combine separated curves if they are within nozzle_width/2 of one another
         idx_groups = {c:[c] for c in range(len(outer_curves))}
+        unioned_curves = [union_curves_on_xy_plane([outer_curves[c]]) for c in range(len(outer_curves))]
         for c1 in range(len(outer_curves)):
             for c2 in range(c1+1, len(outer_curves)):
-                curves1 = union_curves_on_xy_plane([outer_curves[c1]])
-                curves2 = union_curves_on_xy_plane([outer_curves[c2]])
                 overlap_found = False
-                for curve1 in curves1:
+                for curve1 in unioned_curves[c1]:
                     if overlap_found: break
-                    for curve2 in curves2:
+                    for curve2 in unioned_curves[c2]:
                         if rs.PlanarClosedCurveContainment(curve1, curve2, tolerance=nozzle_width/2) > 0:
-                            #print("Overlap between curves at layer: "+str(l), len(curve_groups))
                             idx_groups[c1].append(c2)
                             overlap_found = True
                             break
@@ -225,16 +225,17 @@ def build_vertical_tree(t, shape):
                 node.parent = root
                 root.children.append(node)
             else:
+                curves2 = union_curves_on_xy_plane([crv for g in groups[c] for crv in g])
                 for prev_n in previous_nodes:
-                    curves1 = union_curves_on_xy_plane([crv for g in prev_n.data for crv in g])
-                    curves2 = union_curves_on_xy_plane([crv for g in groups[c] for crv in g])
-                    for curve1 in curves1:
-                        for curve2 in curves2:
-                            if not node.parent and (curve1 and rs.IsCurve(curve1) and rs.IsCurveClosed(curve1)
-                                and curve2 and rs.IsCurve(curve2) and rs.IsCurveClosed(curve2)
-                                and rs.PlanarClosedCurveContainment(curve1, curve2, tolerance=nozzle_width/2) > 0):
-                                node.parent = prev_n
-                                prev_n.children.append(node)
+                    if not node.parent:
+                        curves1 = union_curves_on_xy_plane([crv for g in prev_n.data for crv in g])
+                        for curve1 in curves1:
+                            for curve2 in curves2:
+                                if not node.parent and (curve1 and rs.IsCurve(curve1) and rs.IsCurveClosed(curve1)
+                                    and curve2 and rs.IsCurve(curve2) and rs.IsCurveClosed(curve2)
+                                    and rs.PlanarClosedCurveContainment(curve1, curve2, tolerance=nozzle_width/2) > 0):
+                                    node.parent = prev_n
+                                    prev_n.children.append(node)
 
             if node.parent == None:
                 print('No parent found')
@@ -374,10 +375,12 @@ def subdivide_by_overlap(nodes, width):
                 elem = ''
 
                 for s1 in node1.sub_nodes:
+                    curves1 = [crv for g in s1.data for crv in g]
                     above = False
                     below = False
                     for s2 in node2.sub_nodes:
-                        if curve_overlap_check(union_curves_on_xy_plane([crv for g in s1.data for crv in g]), union_curves_on_xy_plane([crv for g in s2.data for crv in g]), width):
+                        curves2 = [crv for g in s2.data for crv in g]
+                        if curve_overlap_check(curves1, curves2, width):
                             if s1.height > s2.height:
                                 above = True
                             if s1.height < s2.height:
@@ -438,37 +441,33 @@ def union_curves_on_xy_plane(curves):
 
 
 def curve_overlap_check(curves1, curves2, width=0):
+    # set all curves at the x-y origin plane
+    curves1 = [rs.CopyObject(curve, rs.AddPoint(0, 0, -rs.CurveStartPoint(curve).Z)) for curve in curves1 if curve!=None and rs.IsCurve(curve) and rs.IsCurveClosed(curve)]
+    curves2 = [rs.CopyObject(curve, rs.AddPoint(0, 0, -rs.CurveStartPoint(curve).Z)) for curve in curves2 if curve!=None and rs.IsCurve(curve) and rs.IsCurveClosed(curve)]
     for curve1 in curves1:
         for curve2 in curves2:
             # curve1 intersects curve2, curve1 is in curve2, or curve2 is in curve1
             if rs.PlanarClosedCurveContainment(curve1, curve2, tolerance=width/2) > 0:
                 return True
-
-            #if width > 0 and xy_bbox_overlap(curve1, curve2, width):
-                # check if they are within width of each other
-            #    points1 = rs.DivideCurve(curve1, get_num_points(curve1, 1.0))
-            #    points2 = rs.DivideCurve(curve2, get_num_points(curve2, 1.0))
-
-            #    for pnt1 in points1:
-            #        for pnt2 in points2:
-            #            if rs.Distance(pnt1, pnt2) < width/2:
-            #                return True
     return False
 
 
 def check_path(next_node, path):
     for node in path:
-        if overlap.get(next_node) == None or overlap.get(next_node).get(node) == None:
-            if overlap.get(next_node) == None: overlap[next_node] = {}
-            overlap.get(next_node)[node] = check_layers(next_node, node)
-        if not overlap.get(next_node)[node]:
+        if overlap_super.get(next_node) == None or overlap_super.get(next_node).get(node) == None:
+            if overlap_super.get(next_node) == None: overlap_super[next_node] = {}
+            overlap_super.get(next_node)[node] = check_layers(next_node.data.sub_nodes, node.data.sub_nodes)
+        if not overlap_super.get(next_node)[node]:
             return False
     return True
 
 
-def check_layers(node1, node2):
-    for sub in node1.data.sub_nodes:
-            for sub2 in node2.data.sub_nodes:
-                if sub2.height > sub.height and curve_overlap_check([crv for g in sub.data for crv in g], [crv for g in sub2.data for crv in g], nozzle_width):
-                    return False
+def check_layers(curves1, curves2):
+    for sub1 in curves1:
+        for sub2 in curves2:
+            if overlap.get(sub1) == None or overlap.get(sub1).get(sub2) == None:
+                if overlap.get(sub1) == None: overlap[sub1] = {}
+                overlap.get(sub1)[sub2] = not (sub2.height > sub1.height and curve_overlap_check([crv for g in sub1.data for crv in g], [crv for g in sub2.data for crv in g], nozzle_width))
+            if not overlap.get(sub1)[sub2]:
+                return False
     return True
