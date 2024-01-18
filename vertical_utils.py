@@ -15,6 +15,8 @@ from graph_utils import *
 import geometry_utils
 from geometry_utils import *
 
+nozzle_width = 8
+nozzle_height = 30
 
 # My vertical path finding code
 def best_vertical_path(t, shape):

@@ -106,7 +106,7 @@ def get_shortest_indices(start, end, points):
 
     if start > end:
         indices1 = range(start, len(points)) + range(0, end+1)
-        indices2 = range(end, start-1, -1)
+        indices2 = range(start, end-1, -1)
     elif start < end:
         indices1 = range(start, end+1)
         indices2 = range(start, -1, -1) + range(len(points)-1, end-1, -1)

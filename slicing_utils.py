@@ -368,7 +368,7 @@ def get_marching_order(node, start, end):
         marching_order = range(start, other_idx+1)
         reverse_marching_order = range(start, -1, -1) + range(len(points)-1, other_idx-1, -1)
     else:
-        print("Error: start and end indices should not be the same")
+        print("get_marching_order error: start and end indices should not be the same")
 
     if len(marching_order) < len(reverse_marching_order):
         return get_marching_indices(node, start, end, True), True
@@ -385,14 +385,14 @@ def get_marching_indices(node, start, end, reverse):
         elif start < end:
             return range(start, -1, -1) + range(len(points)-1, end-1, -1)
         else:
-            print("Error: start and end indices should not be the same")
+            print("get_marching_indices error: start and end indices should not be the same")
     else:
         if start > end:
             return range(start, len(points)) + range(0, end+1)
         elif start < end:
             return range(start, end+1)
         else:
-            print("Error: start and end indices should not be the same")   
+            print("get_marching_indices error: start and end indices should not be the same")
 
 
 def find_connections(t, node):
