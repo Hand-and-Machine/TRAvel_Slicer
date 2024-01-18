@@ -20,20 +20,66 @@ from graph_utils import *
 
 max_z = 0
 
-def draw_points(t, points, start_idx=0, move_up=True):
+def draw_points(t, points, start_idx=0, bboxes=[], move_up=False):
     global max_z
+    global nozzle_width
 
     travel = []
     if len(points) > 1:
         t.pen_up()
-        travel.append(rs.AddCurve([t.get_position(), points[start_idx]]))
-        if move_up:
-            pos = t.get_position()
+        pos = t.get_position()
+        if move_up or rs.Distance(pos, points[start_idx]) > max(nozzle_width, t.get_layer_height()*2):
+            #bb = rs.BoundingBox(points)
             z = float(t.get_layer_height())/2
-            if rs.Distance(pos, points[start_idx]) > max(z*4, float(t.get_extrude_width())*2):
-                z = max_z
-            t.set_position(pos.X, pos.Y, z)
-            t.set_position(points[start_idx].X, points[start_idx].Y, z)
+            higher_z = max(pos.Z, points[start_idx].Z)+z
+            # go up layer_height/2, go to start position of next start + layer_height/2
+            points1 = [rs.CreatePoint(pos.X, pos.Y, pos.Z+z), rs.CreatePoint(points[start_idx].X, points[start_idx].Y, points[start_idx].Z+z)]
+            # go up to higher z between current and next position, move parallel to x-y plane to next start point
+            points2 = [rs.CreatePoint(pos.X, pos.Y, higher_z), rs.CreatePoint(points[start_idx].X, points[start_idx].Y, higher_z)]
+            # go up to maximum height, move parallel to x-y plane
+            points3 = [rs.CreatePoint(pos.X, pos.Y, max_z), rs.CreatePoint(points[start_idx].X, points[start_idx].Y, max_z)]
+
+            travel_points = points3
+
+            # create a surface that follows path up to the maximum z currently printed
+            # add wiggle room along bottom line in z-direction
+            surf1 = rs.AddSrfPt([
+                rs.CreatePoint(points1[0].X, points1[0].Y, points1[0].Z+nozzle_width/2),
+                rs.CreatePoint(points1[1].X, points1[1].Y, points1[1].Z+nozzle_width/2),
+                rs.CreatePoint(points1[1].X, points1[1].Y, max_z),
+                rs.CreatePoint(points1[0].X, points1[0].Y, max_z)])
+            intersect1 = []
+            for b in (range(len(bboxes)-1, -1, -1)):
+                int1 = rs.IntersectBreps(surf1, bboxes[b], nozzle_width/2)
+                if int1 != None:
+                    intersect1.append(int1)
+                    print("Travel line 1 intersects print")
+                    break
+            if len(intersect1) == 0:
+                travel_points = points1
+            else:
+                surf2 = rs.AddSrfPt([
+                    rs.CreatePoint(points2[0].X, points2[0].Y, points2[0].Z+nozzle_width/2),
+                    rs.CreatePoint(points2[1].X, points2[1].Y, points2[1].Z+nozzle_width/2),
+                    rs.CreatePoint(points2[1].X, points2[1].Y, max_z),
+                    rs.CreatePoint(points2[0].X, points2[0].Y, max_z)])
+                intersect2 = []
+                for b in (range(len(bboxes)-1, -1, -1)):
+                    int2 = rs.IntersectBreps(surf2, bboxes[b], nozzle_width/2)
+                    if int2 != None:
+                        intersect2.append(int2)
+                        print("Travel line 2 intersects print")
+                        break
+                if len(intersect2) == 0:
+                    travel_points = points2
+
+            for t_pnt in travel_points:
+                t.set_position(t_pnt.X, t_pnt.Y, t_pnt.Z)
+
+            travel.append(rs.AddCurve([pos]+travel_points))
+        else:
+            travel.append(rs.AddCurve([pos, points[start_idx]]))
+
         t.set_position(points[start_idx].X, points[start_idx].Y, points[start_idx].Z)
         t.pen_down()
 
@@ -584,7 +630,7 @@ def get_edge_tuples(graph):
     return sorted(ordered_edges, key=lambda x: x[2], reverse=True)
 
 
-def fill_curves_with_fermat_spiral(t, curves, start_pnt=None, wall_mode=False, walls=3, wall_first=False, initial_offset=0.5):
+def fill_curves_with_fermat_spiral(t, curves, bboxes=[], start_pnt=None, wall_mode=False, walls=3, wall_first=False, initial_offset=0.5):
     extrude_width = float(t.get_extrude_width())
 
     # connect curves if given more than one
@@ -647,16 +693,16 @@ def fill_curves_with_fermat_spiral(t, curves, start_pnt=None, wall_mode=False, w
         if start_pnt: start_idx, d = closest_point(start_pnt, outer_points)
 
         if wall_first:
-            travel_paths = travel_paths + draw_points(t, outer_points, start_idx)
+            travel_paths = travel_paths + draw_points(t, outer_points, start_idx, bboxes=bboxes)
             final_spiral = final_spiral + outer_points
         for region in inner_regions:
             region_curve = rs.AddCurve(region)
             region_points = rs.DivideCurve(region_curve, int(rs.CurveLength(region_curve)/t.get_resolution()))
             if region_points==None: region_points = region
-            travel_paths = travel_paths + draw_points(t, region_points, 0, move_up=(not wall_first))
+            travel_paths = travel_paths + draw_points(t, region_points, 0, bboxes=bboxes, move_up=(not wall_first))
             final_spiral = final_spiral + region_points
         if not wall_first:
-            travel_paths = travel_paths + draw_points(t, outer_points, start_idx, move_up=False)
+            travel_paths = travel_paths + draw_points(t, outer_points, start_idx, bboxes=bboxes, move_up=False)
             final_spiral = final_spiral + outer_points
 
     return travel_paths, final_spiral
@@ -819,15 +865,21 @@ def slice_vertical_and_fermat_fill(t, shape, wall_mode=False, walls=3, fill_bott
     fermat_time = time.time()
 
     start_point = path[0].data.sub_nodes[0].start_point
-    for sup_node in path:
-        for node in sup_node.data.sub_nodes:
+    boxes = []
+    for s in range(len(path)):
+        if path[s].data.height!=path[s-1].data.height:
+            print("path index: "+str(s)+", height 1: "+str(path[s].data.height)+", height 2: "+str(path[s-1].data.height))
+            boxes = []
+
+        for node in path[s].data.sub_nodes:
             #print("Layer "+str(node.height))
             start_point = t.get_position()
             for curves in node.data:
                 if not wall_mode or (wall_mode and fill_bottom and node.height<bottom_layers):
-                    travel_paths = travel_paths + fill_curves_with_fermat_spiral(t, curves, start_pnt=start_point, initial_offset=initial_offset)[0]
+                    travel_paths = travel_paths + fill_curves_with_fermat_spiral(t, curves, bboxes=boxes, start_pnt=start_point, initial_offset=initial_offset)[0]
                 else:
-                    travel_paths = travel_paths + fill_curves_with_fermat_spiral(t, curves, start_pnt=start_point, wall_mode=wall_mode, walls=walls, initial_offset=initial_offset)[0]
+                    travel_paths = travel_paths + fill_curves_with_fermat_spiral(t, curves, bboxes=boxes, start_pnt=start_point, wall_mode=wall_mode, walls=walls, initial_offset=initial_offset)[0]
+        boxes.append(bboxes[s])
 
     print("Fermat Spiraling time: "+str(round(time.time()-fermat_time, 3))+" seconds")
     print("Full path generation: "+str(round(time.time()-overall_start_time, 3))+" seconds")

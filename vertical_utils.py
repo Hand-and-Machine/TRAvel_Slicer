@@ -107,47 +107,45 @@ def best_vertical_path(t, shape):
         #height_graph.print_graph_data()
         height_graph.path_check = check_path
 
-        try:
-            bbs = [rs.BoundingBox([data for sub in node.data.sub_nodes for data in sub.data]) for node in height_graph.nodes]
-            for bb in bbs:
-                try: 
-                    box = rs.AddBox(bb)
-                    boundingBoxes.append(box)
-                except:
-                    # this may be a single layer
-                    try:
-                        z = None
-                        minX = None
-                        maxX = None
-                        minY = None
-                        maxY = None
-                        for pnt in bb:
-                            if minX == None or pnt.X < minX:
-                                minX = pnt.X
-                            if maxX == None or pnt.X > maxX:
-                                maxX = pnt.X
-                            if minY == None or pnt.Y < minY:
-                                minY = pnt.Y
-                            if maxY == None or pnt.Y > maxY:
-                                maxY = pnt.Y
-                            if z == None:
-                                z = pnt.Z
-                        points = [
-                            rs.AddPoint(minX, minY, z),
-                            rs.AddPoint(minX, maxY, z),
-                            rs.AddPoint(maxX, maxY, z),
-                            rs.AddPoint(maxX, minY, z)]
-                        srf = rs.AddSrfPt(points)
-                        boundingBoxes.append(srf)
-                    except:
-                        print("Unable to create box from bounding box: ", bb)
-        except Exception as err:
-            print("Unable to create bounding boxes for debugging: "+str(err))
-
         start_time = time.time()
         path_section = height_graph.get_shortest_hamiltonian_path()[0]
         path = path + path_section
         print("Hamiltonian Path Search Time: "+str(round(time.time() - start_time, 3))+" seconds")
+
+    for node in path:
+        bbs = [rs.BoundingBox([data for sub in node.data.sub_nodes for data in sub.data]) for node in height_graph.nodes]
+        for bb in bbs:
+            try: 
+                box = rs.AddBox(bb)
+                boundingBoxes.append(box)
+            except:
+                # this may be a single layer
+                try:
+                    z = None
+                    minX = None
+                    maxX = None
+                    minY = None
+                    maxY = None
+                    for pnt in bb:
+                        if minX == None or pnt.X < minX:
+                            minX = pnt.X
+                        if maxX == None or pnt.X > maxX:
+                            maxX = pnt.X
+                        if minY == None or pnt.Y < minY:
+                            minY = pnt.Y
+                        if maxY == None or pnt.Y > maxY:
+                            maxY = pnt.Y
+                        if z == None:
+                            z = pnt.Z
+                    points = [
+                        rs.AddPoint(minX, minY, z),
+                        rs.AddPoint(minX, maxY, z),
+                        rs.AddPoint(maxX, maxY, z),
+                        rs.AddPoint(maxX, minY, z)]
+                    srf = rs.AddSrfPt(points)
+                    boundingBoxes.append(srf)
+                except:
+                    print("Unable to create box from bounding box: ", bb)
 
     print("Graph construction and all hamiltonian paths search time: "+str(round(time.time() - st_time, 3))+" seconds")
     print("Total Vertical Path search time: "+str(round(time.time() - vert_start_time, 3))+" seconds")
@@ -380,7 +378,7 @@ def subdivide_by_overlap(nodes, width):
                     below = False
                     for s2 in node2.sub_nodes:
                         curves2 = [crv for g in s2.data for crv in g]
-                        if curve_overlap_check(curves1, curves2, width):
+                        if curve_overlap_check(curves1, curves2, width=width):
                             if s1.height > s2.height:
                                 above = True
                             if s1.height < s2.height:
@@ -440,10 +438,11 @@ def union_curves_on_xy_plane(curves):
             raise ValueError("Called union_curves_on_xy_plane with no curves")
 
 
-def curve_overlap_check(curves1, curves2, width=0):
-    # set all curves at the x-y origin plane
-    curves1 = [rs.CopyObject(curve, rs.AddPoint(0, 0, -rs.CurveStartPoint(curve).Z)) for curve in curves1 if curve!=None and rs.IsCurve(curve) and rs.IsCurveClosed(curve)]
-    curves2 = [rs.CopyObject(curve, rs.AddPoint(0, 0, -rs.CurveStartPoint(curve).Z)) for curve in curves2 if curve!=None and rs.IsCurve(curve) and rs.IsCurveClosed(curve)]
+def curve_overlap_check(curves1, curves2, width=0, move_to_xy=True):
+    if move_to_xy:
+        # set all curves at the x-y origin plane
+        curves1 = [rs.CopyObject(curve, rs.AddPoint(0, 0, -rs.CurveStartPoint(curve).Z)) for curve in curves1 if curve!=None and rs.IsCurve(curve) and rs.IsCurveClosed(curve)]
+        curves2 = [rs.CopyObject(curve, rs.AddPoint(0, 0, -rs.CurveStartPoint(curve).Z)) for curve in curves2 if curve!=None and rs.IsCurve(curve) and rs.IsCurveClosed(curve)]
     for curve1 in curves1:
         for curve2 in curves2:
             # curve1 intersects curve2, curve1 is in curve2, or curve2 is in curve1
@@ -467,7 +466,7 @@ def check_layers(curves1, curves2):
         for sub2 in curves2:
             if overlap.get(sub1) == None or overlap.get(sub1).get(sub2) == None:
                 if overlap.get(sub1) == None: overlap[sub1] = {}
-                overlap.get(sub1)[sub2] = not (sub2.height > sub1.height and curve_overlap_check([crv for g in sub1.data for crv in g], [crv for g in sub2.data for crv in g], nozzle_width))
+                overlap.get(sub1)[sub2] = not (sub2.height > sub1.height and curve_overlap_check([crv for g in sub1.data for crv in g], [crv for g in sub2.data for crv in g], width=nozzle_width))
             if not overlap.get(sub1)[sub2]:
                 return False
     return True
