@@ -30,14 +30,14 @@ def draw_points(t, points, start_idx=0, bboxes=[], move_up=False):
         pos = t.get_position()
         if move_up or rs.Distance(pos, points[start_idx]) > max(nozzle_width, t.get_layer_height()*2):
             #bb = rs.BoundingBox(points)
-            z = float(t.get_layer_height())/2
-            higher_z = max(pos.Z, points[start_idx].Z)+z
+            z_lift = float(t.get_layer_height())/2
+            higher_z = max(pos.Z, points[start_idx].Z)+z_lift
             # go up layer_height/2, go to start position of next start + layer_height/2
-            points1 = [rs.CreatePoint(pos.X, pos.Y, pos.Z+z), rs.CreatePoint(points[start_idx].X, points[start_idx].Y, points[start_idx].Z+z)]
+            points1 = [rs.CreatePoint(pos.X, pos.Y, pos.Z+z_lift), rs.CreatePoint(points[start_idx].X, points[start_idx].Y, points[start_idx].Z+z_lift)]
             # go up to higher z between current and next position, move parallel to x-y plane to next start point
             points2 = [rs.CreatePoint(pos.X, pos.Y, higher_z), rs.CreatePoint(points[start_idx].X, points[start_idx].Y, higher_z)]
             # go up to maximum height, move parallel to x-y plane
-            points3 = [rs.CreatePoint(pos.X, pos.Y, max_z), rs.CreatePoint(points[start_idx].X, points[start_idx].Y, max_z)]
+            points3 = [rs.CreatePoint(pos.X, pos.Y, max_z+z_lift), rs.CreatePoint(points[start_idx].X, points[start_idx].Y, max_z+z_lift)]
 
             travel_points = points3
 
@@ -868,7 +868,7 @@ def slice_vertical_and_fermat_fill(t, shape, wall_mode=False, walls=3, fill_bott
     boxes = []
     for s in range(len(path)):
         if path[s].data.height!=path[s-1].data.height:
-            print("path index: "+str(s)+", height 1: "+str(path[s].data.height)+", height 2: "+str(path[s-1].data.height))
+            # only compare to boxes within nozzle height chunk
             boxes = []
 
         for node in path[s].data.sub_nodes:
