@@ -15,20 +15,20 @@ from graph_utils import *
 import geometry_utils
 from geometry_utils import *
 
-global nozzle_width
-global nozzle_height
-nozzle_width = 6.5
-nozzle_height = 20
-
 
 # My vertical path finding code
 def best_vertical_path(t, shape):
     vert_start_time = time.time()
 
-    global overlap
-    overlap = {}
+    global nozzle_width
+    nozzle_width = t.get_nozzle_width()
+    global nozzle_height
+    nozzle_height = t.get_nozzle_height()
+
     global overlap_super
     overlap_super = {}
+    global overlap
+    overlap = {}
 
     # center_points is a visualization variable for debugging,
     # it isn't used further in the code for calculations

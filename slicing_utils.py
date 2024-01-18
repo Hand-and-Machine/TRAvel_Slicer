@@ -22,12 +22,12 @@ max_z = 0
 
 def draw_points(t, points, start_idx=0, bboxes=[], move_up=False):
     global max_z
-    global nozzle_width
 
     travel = []
     if len(points) > 1:
         t.pen_up()
         pos = t.get_position()
+        nozzle_width = t.get_nozzle_width()
         if move_up or rs.Distance(pos, points[start_idx]) > max(nozzle_width, t.get_layer_height()*2):
             #bb = rs.BoundingBox(points)
             z_lift = float(t.get_layer_height())/2
