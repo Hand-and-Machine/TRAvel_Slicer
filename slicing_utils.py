@@ -53,7 +53,6 @@ def draw_points(t, points, start_idx=0, bboxes=[], move_up=False):
                 int1 = rs.IntersectBreps(surf1, bboxes[b], nozzle_width/2)
                 if int1 != None:
                     intersect1.append(int1)
-                    print("Travel line 1 intersects print")
                     break
             if len(intersect1) == 0:
                 travel_points = points1
@@ -68,7 +67,6 @@ def draw_points(t, points, start_idx=0, bboxes=[], move_up=False):
                     int2 = rs.IntersectBreps(surf2, bboxes[b], nozzle_width/2)
                     if int2 != None:
                         intersect2.append(int2)
-                        print("Travel line 2 intersects print")
                         break
                 if len(intersect2) == 0:
                     travel_points = points2
