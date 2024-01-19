@@ -115,7 +115,7 @@ def best_vertical_path(t, shape):
         print("Hamiltonian Path Search Time: "+str(round(time.time() - start_time, 3))+" seconds")
 
     for node in path:
-        bbs = [rs.BoundingBox([data for sub in node.data.sub_nodes for data in sub.data]) for node in height_graph.nodes]
+        bbs = [rs.BoundingBox([data for sub in node.data.sub_nodes for data in sub.data])]
         for bb in bbs:
             try: 
                 box = rs.AddBox(bb)
