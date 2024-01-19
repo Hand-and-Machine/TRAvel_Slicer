@@ -283,10 +283,13 @@ class Grid:
         x_idx = int((point.X - self.minX) // self.width)
         y_idx = int((point.Y - self.minY) // self.width)
 
-        points = []
+        # start with center
+        points = self.grid[x_idx][y_idx]
 
+        # retrieve eight neighbors
         for x in range(max(0, x_idx-1), min(self.max_x_idx+1, x_idx+2)):
             for y in range(max(0, y_idx-1), min(self.max_y_idx+1, y_idx+2)):
-                points = points + self.grid[x][y]
+                if not (x==x_idx and y==y_idx):
+                    points = points + self.grid[x][y]
         
         return points

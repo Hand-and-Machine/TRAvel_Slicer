@@ -64,7 +64,7 @@ def get_isocontour(curve, offset):
         return None
 
     points = rs.DivideCurve(curve, num_pnts)
-    grid = Grid(points, offset)
+    grid = Grid(points, offset/2)
 
     winding_order, direction = get_winding_order(curve, points, offset)
 
