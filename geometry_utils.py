@@ -28,7 +28,7 @@ def get_shape_height(shape):
 
 
 def xy_bbox_overlap(crv1, crv2, width=0):
-    w = width/2
+    w = float(width)/2
     # do bounding boxes of shape overlap in XY plane
     bb1 = rs.BoundingBox(crv1)
     minX1 = bb1[0].X - w

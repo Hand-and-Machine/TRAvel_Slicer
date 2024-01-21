@@ -1,6 +1,7 @@
 class Node:
     def __init__(self, data):
         self.data = data
+        self.box = None
         self.name = None
         self.type = 1
         self.depth = 0
@@ -42,6 +43,13 @@ class Node:
                 queue.append(child)
         
         return list
+
+    def get_node(self, data):
+        if self.data == data: return self
+        else:
+            for node in self.get_all_nodes([]):
+                if node.data == data:
+                    return node
 
     def get_all_nodes(self, list):
         if self not in list: list.append(self)

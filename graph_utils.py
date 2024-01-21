@@ -3,13 +3,14 @@ import time
 class Graph:
     def __init__(self):
         self.nodes = []
+        self.node_keys = {}
         self.edges = {}
         self.edge_keys = {}
         self.starts = []
 
         self.count = 0
         self.start_time = 0
-        self.search_limit = 15
+        self.search_limit = 10
         self.print_exceeded = True
 
         self.path = None
@@ -20,14 +21,18 @@ class Graph:
         self.min_weight = 10000
 
     def print_graph_data(self):
-        print([node.name for node in self.nodes])
-        print([str(start.name)+' --'+str(int(self.edges[start][end]))+'--> '+str(end.name) for start in self.edges for end in self.edges[start]])
+        print(str(len(self.nodes))+" nodes")
+        #print([node.name for node in self.nodes])
+        edges = [str(start.name)+' --'+str(int(self.edges[start][end]))+'--> '+str(end.name) for start in self.edges for end in self.edges[start]]
+        print(str(len(edges))+" edges")
+        #print(edges)
 
     def add_node(self, node):
         if node in self.nodes:
             raise ValueError("Duplicate node")
         else:
             self.nodes.append(node)
+            self.node_keys[node.data] = node
             self.edges[node] = {}
             self.edge_keys[node] = []
             self.min_weight = 1000000
@@ -44,8 +49,9 @@ class Graph:
             self.edge_keys[edge.start] = sorted(self.edge_keys[edge.start], key=lambda x:self.edges[edge.start][x])
 
     def get_node(self, data):
-        for node in self.nodes:
-            if node.data == data: return node
+        return self.node_keys.get(data)
+        #for node in self.nodes:
+        #    if node.data == data: return node
 
     def get_shortest_hamiltonian_path(self):
         paths = self.get_all_hamiltonian_paths(True)
@@ -91,7 +97,7 @@ class Graph:
                 if not shortest or (weight) <= self.min_weight:
                     # if Graph has a function for checking the path to make sure
                     # the traversal is "legal"
-                    if not self.path_check or (self.path_check and self.path_check(end, path[0])):
+                    if not self.path_check or (self.path_check and self.path_check(end, path[0], self)):
                         self.get_hamiltonian_paths((path[0]+[end], weight), paths)
 
         return paths
@@ -122,6 +128,7 @@ class Graph_Node:
     def __init__(self, data):
         self.data = data
         self.name = None
+        self.start = False
 
 
 class Graph_Edge:
