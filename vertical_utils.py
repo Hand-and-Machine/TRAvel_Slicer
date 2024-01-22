@@ -31,9 +31,6 @@ def best_vertical_path(t, shape):
     overlap_super = {}
     global overlap
     overlap = {}
-
-    global xy_overlap
-    xy_overlap = {}
     global sub_crvs
     sub_crvs = {}
 
@@ -75,7 +72,7 @@ def best_vertical_path(t, shape):
                             maxY = pnt.Y
                         if z == None:
                             z = pnt.Z
-                    points = [
+                    bb = [
                         rs.AddPoint(minX, minY, z),
                         rs.AddPoint(minX, maxY, z),
                         rs.AddPoint(maxX, maxY, z),
@@ -84,7 +81,7 @@ def best_vertical_path(t, shape):
                         rs.AddPoint(minX, maxY, z+t.get_layer_height()),
                         rs.AddPoint(maxX, maxY, z+t.get_layer_height()),
                         rs.AddPoint(maxX, minY, z+t.get_layer_height())]
-                    box = rs.Box(points)
+                    box = rs.Box(bb)
                     node.box = box
                 except:
                     print("Unable to create box from bounding box: ", bb)
@@ -316,10 +313,10 @@ def divide_by_overlap(super_root, total_height):
     nodes = super_root.get_all_nodes([])
     for h in range(height):
         nodes_at_height = [node for node in nodes if node.height == h]
-        subdivide_by_overlap(nodes_at_height, nozzle_width)
+        subdivide_by_overlap(nodes_at_height)
 
 
-def subdivide_by_overlap(nodes, width):
+def subdivide_by_overlap(nodes):
     # create a DFA (all DFAs are NFAs) with:
     # States = Above (A), Below (B), Neither (N),
     # Both (X), starting state (S) (also split state)
@@ -377,7 +374,7 @@ def subdivide_by_overlap(nodes, width):
                     above = False
                     below = False
                     for s2 in node2.sub_nodes:
-                        if is_overlapping(s1, s2, xy=True):
+                        if curve_overlap_check(s1, s2, width=0):
                             if s1.height > s2.height:
                                 above = True
                             if s1.height < s2.height:
@@ -453,8 +450,13 @@ def union_curves_on_xy_plane(curves):
 
 
 def curve_overlap_check(curves1, curves2, width=0):
-    for curve1 in curves1:
-        for curve2 in curves2:
+    if sub_crvs.get(curves1) == None:
+        sub_crvs[curves1] = union_curves_on_xy_plane([crv for g in curves1.data for crv in g])
+    if sub_crvs.get(curves2) == None:
+        sub_crvs[curves2] = union_curves_on_xy_plane([crv for g in curves2.data for crv in g])
+
+    for curve1 in sub_crvs[curves1]:
+        for curve2 in sub_crvs[curves2]:
             # curve1 intersects curve2, curve1 is in curve2, or curve2 is in curve1
             if rs.PlanarClosedCurveContainment(curve1, curve2, tolerance=width/2) > 0:
                 return True
@@ -489,27 +491,11 @@ def check_layers_for_overlap(sub_nodes1, sub_nodes2):
 
 
 # is sub1 overlapping sub2?
-def is_overlapping(sub1, sub2, xy=False, width=nozzle_width):
-    if ((xy and (xy_overlap.get(sub1) == None or xy_overlap[sub1].get(sub2) == None)) 
-                or (overlap.get(sub1) == None or overlap[sub1].get(sub2) == None)):
-        if sub_crvs.get(sub1) == None:
-            sub_crvs[sub1] = union_curves_on_xy_plane([crv for g in sub1.data for crv in g])
-        if sub_crvs.get(sub2) == None:
-            sub_crvs[sub2] = union_curves_on_xy_plane([crv for g in sub2.data for crv in g])
-
-        if xy_overlap.get(sub1) == None: xy_overlap[sub1] = {}
-        if xy_overlap.get(sub2) == None: xy_overlap[sub2] = {}
-
-        if (xy or sub1.height > sub2.height) and xy_overlap[sub1].get(sub2) == None:
-            xy_overlap[sub1][sub2] = curve_overlap_check(sub_crvs[sub1], sub_crvs[sub2], width=width)
-            xy_overlap[sub2][sub1] = xy_overlap[sub1][sub2]
-
+def is_overlapping(sub1, sub2, width=nozzle_width):
+    if (overlap.get(sub1) == None or overlap[sub1].get(sub2) == None):
         if overlap.get(sub1) == None: overlap[sub1] = {}
+        overlap.get(sub1)[sub2] = sub1.height > sub2.height and curve_overlap_check(sub1, sub2, width=width)
 
-        overlap.get(sub1)[sub2] = sub1.height > sub2.height and xy_overlap[sub1][sub2]
-
-    if xy and xy_overlap[sub1][sub2]:
-        return True
-    if not xy and overlap[sub1][sub2]:
+    if overlap[sub1][sub2]:
         return True
     return False
