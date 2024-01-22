@@ -191,7 +191,7 @@ def build_vertical_tree(t, shape):
         center_point = rs.CreatePoint(center_point.X/(len(curve_groups) + 1), center_point.Y/(len(curve_groups) + 1), l*t.get_layer_height())
         center_points.append(center_point)
 
-        # combine separated curves if they are within nozzle_width/2 of one another
+        # combine separated curves if they are within nozzle_width*5/8 of one another
         idx_groups = {c:[c] for c in range(len(outer_curves))}
         for c1 in range(len(outer_curves)):
             for c2 in range(c1+1, len(outer_curves)):

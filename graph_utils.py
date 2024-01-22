@@ -111,7 +111,7 @@ class Graph:
 
     def get_path_to(self, end, path):
         if not self.path_found:
-            if time.time()-self.start_time > self.count_limit:
+            if time.time()-self.start_time > self.search_limit:
                 raise ValueError("Exceeded search limit")
 
             for node in self.edges[path[-1]].keys():

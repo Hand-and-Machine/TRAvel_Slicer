@@ -30,16 +30,16 @@ def draw_points(t, points, start_idx=0, bboxes=[], move_up=False):
         nozzle_width = t.get_nozzle_width()
         if move_up or rs.Distance(pos, points[start_idx]) > max(nozzle_width, t.get_layer_height()*2):
             #bb = rs.BoundingBox(points)
-            z_lift = float(t.get_layer_height())/2
+            z_lift = 2*float(t.get_layer_height())
             higher_z = max(pos.Z, points[start_idx].Z)+z_lift
             # go up layer_height/2, go to start position of next start + layer_height/2
-            points1 = [rs.CreatePoint(pos.X, pos.Y, pos.Z+z_lift), rs.CreatePoint(points[start_idx].X, points[start_idx].Y, points[start_idx].Z+z_lift)]
+            #points1 = [rs.CreatePoint(pos.X, pos.Y, pos.Z+z_lift), rs.CreatePoint(points[start_idx].X, points[start_idx].Y, points[start_idx].Z+z_lift)]
             # go up to higher z between current and next position, move parallel to x-y plane to next start point
-            points2 = [rs.CreatePoint(pos.X, pos.Y, higher_z), rs.CreatePoint(points[start_idx].X, points[start_idx].Y, higher_z)]
+            points1 = [rs.CreatePoint(pos.X, pos.Y, higher_z), rs.CreatePoint(points[start_idx].X, points[start_idx].Y, higher_z)]
             # go up to maximum height, move parallel to x-y plane
-            points3 = [rs.CreatePoint(pos.X, pos.Y, max_z+z_lift), rs.CreatePoint(points[start_idx].X, points[start_idx].Y, max_z+z_lift)]
+            points2 = [rs.CreatePoint(pos.X, pos.Y, max_z+z_lift), rs.CreatePoint(points[start_idx].X, points[start_idx].Y, max_z+z_lift)]
 
-            travel_points = points3
+            travel_points = points2
 
             # create a surface that follows path up to the maximum z currently printed
             # add wiggle room along bottom line in z-direction
@@ -56,20 +56,6 @@ def draw_points(t, points, start_idx=0, bboxes=[], move_up=False):
                     break
             if len(intersect1) == 0:
                 travel_points = points1
-            else:
-                surf2 = rs.AddSrfPt([
-                    rs.CreatePoint(points2[0].X, points2[0].Y, points2[0].Z+nozzle_width/2),
-                    rs.CreatePoint(points2[1].X, points2[1].Y, points2[1].Z+nozzle_width/2),
-                    rs.CreatePoint(points2[1].X, points2[1].Y, max_z),
-                    rs.CreatePoint(points2[0].X, points2[0].Y, max_z)])
-                intersect2 = []
-                for b in (range(len(bboxes)-1, -1, -1)):
-                    int2 = rs.IntersectBreps(surf2, bboxes[b], nozzle_width/2)
-                    if int2 != None:
-                        intersect2.append(int2)
-                        break
-                if len(intersect2) == 0:
-                    travel_points = points2
 
             for t_pnt in travel_points:
                 t.set_position(t_pnt.X, t_pnt.Y, t_pnt.Z)
