@@ -29,10 +29,9 @@ def draw_points(t, points, start_idx=0, bboxes=[], move_up=False):
         pos = t.get_position()
         nozzle_width = t.get_nozzle_width()
         if move_up or rs.Distance(pos, points[start_idx]) > max(nozzle_width, t.get_layer_height()*2):
-            #bb = rs.BoundingBox(points)
             z_lift = 2*float(t.get_layer_height())
             higher_z = max(pos.Z, points[start_idx].Z)+z_lift
-            # go up layer_height/2, go to start position of next start + layer_height/2
+            # go up layer_height*2, go to start position of next start + layer_height*2
             #points1 = [rs.CreatePoint(pos.X, pos.Y, pos.Z+z_lift), rs.CreatePoint(points[start_idx].X, points[start_idx].Y, points[start_idx].Z+z_lift)]
             # go up to higher z between current and next position, move parallel to x-y plane to next start point
             points1 = [rs.CreatePoint(pos.X, pos.Y, higher_z), rs.CreatePoint(points[start_idx].X, points[start_idx].Y, higher_z)]
@@ -683,10 +682,10 @@ def fill_curves_with_fermat_spiral(t, curves, bboxes=[], start_pnt=None, wall_mo
             region_curve = rs.AddCurve(region)
             region_points = rs.DivideCurve(region_curve, int(rs.CurveLength(region_curve)/t.get_resolution()))
             if region_points==None: region_points = region
-            travel_paths = travel_paths + draw_points(t, region_points, 0, bboxes=bboxes, move_up=(not wall_first))
+            travel_paths = travel_paths + draw_points(t, region_points, 0, bboxes=bboxes)
             final_spiral = final_spiral + region_points
         if not wall_first:
-            travel_paths = travel_paths + draw_points(t, outer_points, start_idx, bboxes=bboxes, move_up=False)
+            travel_paths = travel_paths + draw_points(t, outer_points, start_idx, bboxes=bboxes)
             final_spiral = final_spiral + outer_points
 
     return travel_paths, final_spiral
@@ -730,15 +729,15 @@ def fill_curves_with_spiral(t, curves, start_pnt=None, wall_first=False, initial
                         if start_pnt:
                             start_idx, d = closest_point(start_pnt, rs.DivideCurve(node.sub_nodes[0], num_pnts))
                         spiral, indices = spiral_contours(t, node.sub_nodes, start_idx)
-                        travel_paths = travel_paths + draw_points(t, spiral, start_idx=start_idx, move_up=False)
+                        travel_paths = travel_paths + draw_points(t, spiral, start_idx=start_idx)
                     elif node.type == 2:
                         points = rs.DivideCurve(node.sub_nodes[0], num_pnts)
-                        travel_paths = travel_paths + draw_points(t, points, start_idx=start_idx, move_up=False)
+                        travel_paths = travel_paths + draw_points(t, points, start_idx=start_idx)
         
         if not wall_first:
             start_idx = 0
             if start_pnt: start_idx, d = closest_point(start_pnt, outer_points)
-            travel_paths = travel_paths + draw_points(t, outer_points, start_idx, move_up=False)
+            travel_paths = travel_paths + draw_points(t, outer_points, start_idx)
 
     return travel_paths
 
