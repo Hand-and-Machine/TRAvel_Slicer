@@ -73,14 +73,14 @@ def best_vertical_path(t, shape):
                         if z == None:
                             z = pnt.Z
                     bb = [
-                        rs.AddPoint(minX, minY, z),
-                        rs.AddPoint(minX, maxY, z),
-                        rs.AddPoint(maxX, maxY, z),
-                        rs.AddPoint(maxX, minY, z),
-                        rs.AddPoint(minX, minY, z+t.get_layer_height()),
-                        rs.AddPoint(minX, maxY, z+t.get_layer_height()),
-                        rs.AddPoint(maxX, maxY, z+t.get_layer_height()),
-                        rs.AddPoint(maxX, minY, z+t.get_layer_height())]
+                        rs.CreatePoint(minX, minY, z),
+                        rs.CreatePoint(minX, maxY, z),
+                        rs.CreatePoint(maxX, maxY, z),
+                        rs.CreatePoint(maxX, minY, z),
+                        rs.CreatePoint(minX, minY, z+t.get_layer_height()),
+                        rs.CreatePoint(minX, maxY, z+t.get_layer_height()),
+                        rs.CreatePoint(maxX, maxY, z+t.get_layer_height()),
+                        rs.CreatePoint(maxX, minY, z+t.get_layer_height())]
                     box = rs.Box(bb)
                     node.box = box
                 except:
