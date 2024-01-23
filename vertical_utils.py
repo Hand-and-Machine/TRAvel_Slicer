@@ -124,7 +124,7 @@ def best_vertical_path(t, shape):
                 height_graph.starts.append((node, weight))
                 node.start = True
 
-        print("starts", [(n[0].name, round(n[1], 2)) for n in height_graph.starts])
+        #print("starts", [(n[0].name, round(n[1], 2)) for n in height_graph.starts])
 
         # add edges to graph
         for graph_node in height_graph.nodes:
@@ -163,7 +163,7 @@ def best_vertical_path(t, shape):
 
     print("Graph construction and all hamiltonian paths search time: "+str(round(time.time() - st_time, 3))+" seconds")
     print("Total Vertical Path search time: "+str(round(time.time() - vert_start_time, 3))+" seconds")
-    return vert_tree, path, center_points, edges, height_graph
+    return vert_tree, path, center_points, edges
 
 
 def build_vertical_tree(t, shape):
