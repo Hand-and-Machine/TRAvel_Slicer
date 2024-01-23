@@ -16,6 +16,8 @@ class Node:
         self.start_point = None
         self.needs_support = None
         self.fermat_spiral = None
+        self.min_sub_height = 10000000
+        self.max_sub_height = 0
 
     def add_child(self, data):
         new_node = Node(data)
@@ -25,6 +27,13 @@ class Node:
         new_node.parent = self
         new_node.depth = self.depth + 1
         return new_node
+
+    def add_sub_node(self, data):
+        self.sub_nodes.append(data)
+        if data.height < self.min_sub_height:
+            self.min_sub_height = data.height
+        if data.height > self.max_sub_height:
+            self.max_sub_height = data.height
 
     def dfs(self, list=[]):
         if self not in list: list.append(self)

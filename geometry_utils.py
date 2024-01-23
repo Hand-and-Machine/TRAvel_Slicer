@@ -20,11 +20,13 @@ def get_size(shape):
     return size
 
 
-def get_shape_height(shape):
+def get_shape_height(shape, xy_plane=False):
     # bounding box of shape
     bb = rs.BoundingBox(shape)
-    height = rs.Distance(bb[0], bb[4])
-    return height
+    if xy_plane:
+        return rs.Distance([bb[0].X, bb[0].Y, 0], bb[4])
+    else:
+        return rs.Distance(bb[0], bb[4])
 
 
 def xy_bbox_overlap(crv1, crv2, width=0):

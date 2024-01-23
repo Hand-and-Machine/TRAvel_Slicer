@@ -778,7 +778,7 @@ def fill_curves_with_contours(t, curves, start_pnt=None, wall_mode=False, walls=
 
 def slice_fermat_fill(t, shape, start_pnt=None, start=0, end=None, wall_mode=False, walls=3, fill_bottom=False, bottom_layers=3, initial_offset=0.5):
     travel_paths = []
-    layers = int(math.floor(get_shape_height(shape) / t.get_layer_height())) + 1
+    layers = int(math.floor(get_shape_height(shape, xy_plane=True) / t.get_layer_height())) + 1
 
     print("Number of layers: "+str(layers-1))
 
@@ -799,7 +799,7 @@ def slice_fermat_fill(t, shape, start_pnt=None, start=0, end=None, wall_mode=Fal
 
 def slice_spiral_fill(t, shape, start_pnt=None, start=0, end=None, wall_mode=False, walls=3, fill_bottom=False, bottom_layers=3, initial_offset=0.5):
     travel_paths = []
-    layers = int(math.floor(get_shape_height(shape) / t.get_layer_height())) + 1
+    layers = int(math.floor(get_shape_height(shape, xy_plane=True) / t.get_layer_height())) + 1
 
     print("Number of layers: "+str(layers-1))
 
@@ -820,7 +820,7 @@ def slice_spiral_fill(t, shape, start_pnt=None, start=0, end=None, wall_mode=Fal
 
 def slice_contour_fill(t, shape, start=0, end=None, wall_mode=False, walls=3, fill_bottom=False, bottom_layers=3, initial_offset=0.5):
     travel_paths = []
-    layers = int(math.floor(get_shape_height(shape) / t.get_layer_height())) + 1
+    layers = int(math.floor(get_shape_height(shape, xy_plane=True) / t.get_layer_height())) + 1
 
     print("Number of layers: "+str(layers-1))
 

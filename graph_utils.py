@@ -10,7 +10,7 @@ class Graph:
 
         self.count = 0
         self.start_time = 0
-        self.search_limit = 10
+        self.search_limit = 15
         self.print_exceeded = True
 
         self.path = None
@@ -46,7 +46,7 @@ class Graph:
             self.edges[edge.start][edge.end] = edge.weight
             self.min_weight = max(1000000, edge.weight*100)
             self.edge_keys[edge.start].append(edge.end)
-            self.edge_keys[edge.start] = sorted(self.edge_keys[edge.start], key=lambda x:self.edges[edge.start][x])
+            self.edge_keys[edge.start] = sorted(self.edge_keys[edge.start], key=lambda x:self.edges[edge.start][x], reverse=True)
 
     def get_node(self, data):
         return self.node_keys.get(data)
@@ -56,7 +56,7 @@ class Graph:
     def get_shortest_hamiltonian_path(self):
         paths = self.get_all_hamiltonian_paths(True)
         if len(paths) == 0:
-            print("Unable to find a hamiltonian path in graph")
+            print("Unable to find a Hamiltonian path in graph")
             return [[]]
         paths = sorted(paths, key=lambda path: path[1])
         print(str(len(paths))+" hamiltonian paths found.")
@@ -98,7 +98,7 @@ class Graph:
                     # if Graph has a function for checking the path to make sure
                     # the traversal is "legal"
                     if not self.path_check or (self.path_check and self.path_check(end, path[0], self)):
-                        self.get_hamiltonian_paths((path[0]+[end], weight), paths)
+                        self.get_hamiltonian_paths((path[0]+[end], weight), paths, shortest)
 
         return paths
 
