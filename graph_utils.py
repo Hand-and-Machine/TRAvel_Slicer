@@ -60,7 +60,11 @@ class Graph:
             return [[]]
         paths = sorted(paths, key=lambda path: path[1])
         print(str(len(paths))+" hamiltonian paths found.")
-        print("Hamiltonian path weights: ", [round(path[1], 2) for path in paths])
+        weights = ""
+        for path in paths:
+            weights = weights + str(round(path[1], 2))
+            if path!=paths[-1]: weights = weights + ", "
+        print("Hamiltonian path weights: "+weights)
         return paths[0]
 
     def get_all_hamiltonian_paths(self, shortest=False):

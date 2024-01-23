@@ -863,8 +863,8 @@ def slice_vertical_and_fermat_fill(t, shape, wall_mode=False, walls=3, fill_bott
                     travel_paths = travel_paths + fill_curves_with_fermat_spiral(t, curves, bboxes=boxes, start_pnt=start_point, initial_offset=initial_offset)[0]
                 else:
                     travel_paths = travel_paths + fill_curves_with_fermat_spiral(t, curves, bboxes=boxes, start_pnt=start_point, wall_mode=wall_mode, walls=walls, initial_offset=initial_offset)[0]
-        boxes.append(path[s].data.box)
-        boundingboxes.append(path[s].data.box)
+        if path[s].data.box!=None: boxes.append(path[s].data.box)
+        if path[s].data.box!=None: boundingboxes.append(path[s].data.box)
 
     print("Fermat Spiraling time: "+str(round(time.time()-fermat_time, 3))+" seconds")
     print("Full path generation: "+str(round(time.time()-overall_start_time, 3))+" seconds")
