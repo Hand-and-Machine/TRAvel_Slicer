@@ -59,9 +59,9 @@ def draw_points(t, points, start_idx=0, bboxes=[], move_up=False):
             for t_pnt in travel_points:
                 t.set_position(t_pnt.X, t_pnt.Y, t_pnt.Z)
 
-            travel.append(rs.AddCurve([pos]+travel_points))
+            travel.append(rs.AddPolyline([pos]+travel_points))
         else:
-            travel.append(rs.AddCurve([pos, points[start_idx]]))
+            travel.append(rs.AddPolyline([pos, points[start_idx]]))
 
         t.set_position(points[start_idx].X, points[start_idx].Y, points[start_idx].Z)
         t.pen_down()
