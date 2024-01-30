@@ -66,7 +66,7 @@ def get_surface(curve, z):
 def get_num_points(curve, tolerance):
     # we justify a coefficient of 1/2, the points
     # overlap by half the extrusion width
-    k = 1/2
+    k = 0.5
     return max(int(rs.CurveLength(curve)/(float(tolerance)*k)), 4)
 
 
@@ -134,6 +134,8 @@ def get_shortest_indices(start, end, points):
 
 
 def get_curves(shape, z, retry=0):
+    if z == 0:
+        z = 0.1
     plane = get_plane(float(z))
     s_time = time.time()
     initial_curves = rs.AddSrfContourCrvs(shape, plane)
@@ -290,15 +292,15 @@ class Grid:
             self.grid[x_idx][y_idx].append(point)
 
     def get_neighbors(self, point):
-        x_idx = int((point.X - self.minX) // self.width)
-        y_idx = int((point.Y - self.minY) // self.width)
+        x_idx = max(min(int((point.X - self.minX) // self.width), self.max_x_idx), 0)
+        y_idx = max(min(int((point.Y - self.minY) // self.width), self.max_y_idx), 0)
 
         # start with center
         points = self.grid[x_idx][y_idx]
 
         # retrieve eight neighbors
-        for x in range(max(0, x_idx-1), min(self.max_x_idx, x_idx+2)):
-            for y in range(max(0, y_idx-1), min(self.max_y_idx, y_idx+2)):
+        for x in range(max(0, x_idx-1), min(self.max_x_idx+1, x_idx+2)):
+            for y in range(max(0, y_idx-1), min(self.max_y_idx+1, y_idx+2)):
                 if not (x==x_idx and y==y_idx):
                     points = points + self.grid[x][y]
         
