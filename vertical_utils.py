@@ -139,13 +139,14 @@ def best_vertical_path(t, shape):
             siblings_and_counsins = [n for n in nodes_at_height if n not in direct_relations]
             for node2 in siblings_and_counsins:
                 # do not add edge if node1 overlaps node2
-                if  node2!=graph_node and check_path(height_graph.get_node(node2), [graph_node]):
+                if  node2!=node1 and check_path(height_graph.get_node(node2), [graph_node]):
                     # compute travel between curves, where weight is set as
                     # distance between center of start and end curves within node
                     weight = rs.Distance(node1.sub_nodes[-1].center_point, node2.sub_nodes[0].center_point)
                     height_graph.add_edge(Graph_Edge(graph_node, height_graph.get_node(node2), weight))
-                    arrow = rs.AddCurve([graph_node.data.sub_nodes[-1].center_point, node2.sub_nodes[0].center_point])
-                    edges.append(arrow)
+                    if weight!=0:
+                        arrow = rs.AddCurve([graph_node.data.sub_nodes[-1].center_point, node2.sub_nodes[0].center_point])
+                        edges.append(arrow)
 
         height_graph.print_graph_data()
         height_graph.path_check = check_path
