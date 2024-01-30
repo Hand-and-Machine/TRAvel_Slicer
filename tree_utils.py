@@ -14,6 +14,7 @@ class Node:
         self.sub_nodes = []
         self.connection = {}
         self.start_point = None
+        self.center_point = None
         self.needs_support = None
         self.fermat_spiral = None
         self.min_sub_height = 10000000

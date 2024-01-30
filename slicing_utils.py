@@ -778,7 +778,7 @@ def fill_curves_with_contours(t, curves, start_pnt=None, wall_mode=False, walls=
 
 def slice_fermat_fill(t, shape, start_pnt=None, start=0, end=None, wall_mode=False, walls=3, fill_bottom=False, bottom_layers=3, initial_offset=0.5):
     travel_paths = []
-    layers = int(math.floor(get_shape_height(shape, xy_plane=True) / t.get_layer_height())) + 1
+    layers = int(math.floor(get_shape_height(shape) / t.get_layer_height())) + 1
 
     print("Number of layers: "+str(layers-1))
 
@@ -799,7 +799,7 @@ def slice_fermat_fill(t, shape, start_pnt=None, start=0, end=None, wall_mode=Fal
 
 def slice_spiral_fill(t, shape, start_pnt=None, start=0, end=None, wall_mode=False, walls=3, fill_bottom=False, bottom_layers=3, initial_offset=0.5):
     travel_paths = []
-    layers = int(math.floor(get_shape_height(shape, xy_plane=True) / t.get_layer_height())) + 1
+    layers = int(math.floor(get_shape_height(shape) / t.get_layer_height())) + 1
 
     print("Number of layers: "+str(layers-1))
 
@@ -820,7 +820,7 @@ def slice_spiral_fill(t, shape, start_pnt=None, start=0, end=None, wall_mode=Fal
 
 def slice_contour_fill(t, shape, start=0, end=None, wall_mode=False, walls=3, fill_bottom=False, bottom_layers=3, initial_offset=0.5):
     travel_paths = []
-    layers = int(math.floor(get_shape_height(shape, xy_plane=True) / t.get_layer_height())) + 1
+    layers = int(math.floor(get_shape_height(shape) / t.get_layer_height())) + 1
 
     print("Number of layers: "+str(layers-1))
 
@@ -842,14 +842,12 @@ def slice_vertical_and_fermat_fill(t, shape, wall_mode=False, walls=3, fill_bott
     overall_start_time = time.time()
 
     travel_paths = []
-    center_points = []
-    tree, path, center_points, edges = best_vertical_path(t, shape)
+    tree, path, edges = best_vertical_path(t, shape)
 
     fermat_time = time.time()
 
     start_point = path[0].data.sub_nodes[0].start_point
     boxes = []
-    boundingboxes = []
     for s in range(len(path)):
         if path[s].data.height!=path[s-1].data.height:
             # only compare to boxes within nozzle height chunk
@@ -864,12 +862,11 @@ def slice_vertical_and_fermat_fill(t, shape, wall_mode=False, walls=3, fill_bott
                 else:
                     travel_paths = travel_paths + fill_curves_with_fermat_spiral(t, curves, bboxes=boxes, start_pnt=start_point, wall_mode=wall_mode, walls=walls, initial_offset=initial_offset)[0]
         if path[s].data.box!=None: boxes.append(path[s].data.box)
-        if path[s].data.box!=None: boundingboxes.append(path[s].data.box)
 
     print("Fermat Spiraling time: "+str(round(time.time()-fermat_time, 3))+" seconds")
     print("Full path generation: "+str(round(time.time()-overall_start_time, 3))+" seconds")
 
-    return travel_paths, tree, path, center_points, boundingboxes, edges
+    return travel_paths, tree, path, edges
 
 
 def slice_2_half_D_fermat(t, curves, layers=3, wall_mode=False, walls=3, fill_bottom=False, bottom_layers=3, initial_offset=0.5):

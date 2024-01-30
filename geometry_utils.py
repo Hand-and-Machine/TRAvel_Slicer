@@ -1,6 +1,8 @@
 import Rhino
 import rhinoscriptsyntax as rs
 
+import time
+
 def get_area(curve):
     try:
         return rs.Area(curve)
@@ -11,7 +13,7 @@ def get_area_center(curve):
     try:
         return rs.CurveAreaCentroid(curve)[0]
     except:
-        return rs.AddPoint(0, 0, 0)
+        return rs.CreatePoint(0, 0, 0)
 
 def get_size(shape):
     # bounding box of shape
@@ -20,7 +22,7 @@ def get_size(shape):
     return size
 
 
-def get_shape_height(shape, xy_plane=False):
+def get_shape_height(shape, xy_plane=True):
     # bounding box of shape
     bb = rs.BoundingBox(shape)
     if xy_plane:
@@ -61,8 +63,11 @@ def get_surface(curve, z):
     return surface
 
 
-def get_num_points(curve, offset):
-    return max(int(rs.CurveLength(curve)/(float(offset)/4)), 4)
+def get_num_points(curve, tolerance):
+    # we justify a coefficient of 1/2, the points
+    # overlap by half the extrusion width
+    k = 1/2
+    return max(int(rs.CurveLength(curve)/(float(tolerance)*k)), 4)
 
 
 def get_winding_order(curve, points, offset):
@@ -78,6 +83,7 @@ def get_winding_order(curve, points, offset):
 
         direction = None
         if rs.PointInPlanarClosedCurve(pnt_cw, curve):
+            print("Weird! Winding order was counter-clockwise")
             winding_order = "CW"
             direction = -90
             break
@@ -129,7 +135,10 @@ def get_shortest_indices(start, end, points):
 
 def get_curves(shape, z, retry=0):
     plane = get_plane(float(z))
+    s_time = time.time()
     initial_curves = rs.AddSrfContourCrvs(shape, plane)
+    print("Surface contour time: "+str(round(time.time()-s_time, 3))+" seconds")
+
     if len(initial_curves) > 1: initial_curves = rs.JoinCurves(initial_curves)
 
     curves = []
@@ -165,8 +174,7 @@ def get_curve_groupings(curves):
     # find curve groupings from intersection of shape with plane
     # curves can represent the inside of a surface or potentially
     # a nested curve within another set of curves defining a surface
-    all_points = [rs.DivideCurve(curve, 100) for curve in curves]
-    inside = {c:{c2:all([rs.PointInPlanarClosedCurve(p, curves[c2]) for p in all_points[c]]) for c2 in range(len(curves)) if c2 != c} for c in range(len(curves))}
+    inside = {c:{c2:rs.PlanarClosedCurveContainment(curves[c], curves[c2])==2 for c2 in range(len(curves)) if c2 != c} for c in range(len(curves))}
     outer_curves = [c for c in range(len(curves)) if not any([inside[c][k] for k in inside[c]])]
     inner_curves = [c for c in range(len(curves)) if c not in outer_curves]
 
@@ -289,8 +297,8 @@ class Grid:
         points = self.grid[x_idx][y_idx]
 
         # retrieve eight neighbors
-        for x in range(max(0, x_idx-1), min(self.max_x_idx+1, x_idx+2)):
-            for y in range(max(0, y_idx-1), min(self.max_y_idx+1, y_idx+2)):
+        for x in range(max(0, x_idx-1), min(self.max_x_idx, x_idx+2)):
+            for y in range(max(0, y_idx-1), min(self.max_y_idx, y_idx+2)):
                 if not (x==x_idx and y==y_idx):
                     points = points + self.grid[x][y]
         

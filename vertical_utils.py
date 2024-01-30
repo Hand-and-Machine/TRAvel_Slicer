@@ -15,8 +15,6 @@ from graph_utils import *
 import geometry_utils
 from geometry_utils import *
 
-nozzle_width = 8
-nozzle_height = 30
 
 # My vertical path finding code
 def best_vertical_path(t, shape):
@@ -34,10 +32,9 @@ def best_vertical_path(t, shape):
     global sub_crvs
     sub_crvs = {}
 
-    # center_points is a visualization variable for debugging,
-    # it isn't used further in the code for calculations
-    init_tree, center_points = build_vertical_tree(t, shape)
-    vert_tree = segment_tree_by_height(t, init_tree, get_shape_height(shape, xy_plane=True))
+    init_tree = build_vertical_tree(t, shape)
+
+    vert_tree = segment_tree_by_height(t, init_tree, get_shape_height(shape))
     if len(vert_tree.get_all_nodes([])) > len(init_tree.get_all_nodes([])):
         raise ValueError("There should not be more super nodes than nodes")
 
@@ -96,7 +93,7 @@ def best_vertical_path(t, shape):
     edges = []
 
     path = []
-    height = get_shape_height(shape, xy_plane=True)
+    height = get_shape_height(shape)
     for h in range(int(math.floor(height / nozzle_height))+1):
         nodes_at_height = [node for node in all_nodes if node.height == h]
         print("Nodes at nozzle height "+str(h)+": "+str(len(nodes_at_height)))
@@ -120,7 +117,7 @@ def best_vertical_path(t, shape):
             if node.data.min_sub_height == min_height:
                 weight = 0
                 if prev_node!=None:
-                    weight = rs.Distance(prev_node.data.sub_nodes[-1].start_point, node.data.sub_nodes[0].start_point)
+                    weight = rs.Distance(prev_node.data.sub_nodes[-1].center_point, node.data.sub_nodes[0].center_point)
                 height_graph.starts.append((node, weight))
                 node.start = True
 
@@ -131,10 +128,9 @@ def best_vertical_path(t, shape):
             # edges related to height dependency
             node1 = graph_node.data
             for child in node1.children:
-                if child in nodes_at_height:
+                if child in nodes_at_height and child!=graph_node.data:
                     height_graph.add_edge(Graph_Edge(graph_node, height_graph.get_node(child), 0))
-
-                    arrow = rs.AddCurve([graph_node.data.sub_nodes[-1].start_point, child.sub_nodes[0].start_point])
+                    arrow = rs.AddCurve([graph_node.data.sub_nodes[-1].center_point, child.sub_nodes[0].center_point])
                     rs.CurveArrows(arrow, 2)
                     edges.append(arrow)
 
@@ -143,13 +139,12 @@ def best_vertical_path(t, shape):
             siblings_and_counsins = [n for n in nodes_at_height if n not in direct_relations]
             for node2 in siblings_and_counsins:
                 # do not add edge if node1 overlaps node2
-                if check_path(height_graph.get_node(node2), [graph_node]):
+                if  node2!=graph_node and check_path(height_graph.get_node(node2), [graph_node]):
                     # compute travel between curves, where weight is set as
                     # distance between center of start and end curves within node
-                    weight = rs.Distance(node1.sub_nodes[-1].start_point, node2.sub_nodes[0].start_point)
+                    weight = rs.Distance(node1.sub_nodes[-1].center_point, node2.sub_nodes[0].center_point)
                     height_graph.add_edge(Graph_Edge(graph_node, height_graph.get_node(node2), weight))
-
-                    arrow = rs.AddCurve([graph_node.data.sub_nodes[-1].start_point, node2.sub_nodes[0].start_point])
+                    arrow = rs.AddCurve([graph_node.data.sub_nodes[-1].center_point, node2.sub_nodes[0].center_point])
                     edges.append(arrow)
 
         height_graph.print_graph_data()
@@ -163,23 +158,26 @@ def best_vertical_path(t, shape):
 
     print("Graph construction and all hamiltonian paths search time: "+str(round(time.time() - st_time, 3))+" seconds")
     print("Total Vertical Path search time: "+str(round(time.time() - vert_start_time, 3))+" seconds")
-    return vert_tree, path, center_points, edges
+    return vert_tree, path, edges
 
 
 def build_vertical_tree(t, shape):
     start_time = time.time()
 
-    layers = int(math.floor(get_shape_height(shape, xy_plane=True) / t.get_layer_height()))
+    layers = int(math.floor(get_shape_height(shape) / t.get_layer_height()))
     root = Node('root')
     root.name = 'root'
 
     print('Number of layers:'+str(layers))
 
+    curve_time = 0
+
     center_point = rs.CreatePoint(0, 0, 0)
-    center_points = []
     previous_nodes = [root]
     for l in range(layers + 1):
+        s_time = time.time()
         curve_groups = get_curves(shape, l*t.get_layer_height())
+        curve_time = curve_time + time.time()-s_time
 
         outer_curves = []
         for crvs in curve_groups:
@@ -187,7 +185,6 @@ def build_vertical_tree(t, shape):
             center_point = rs.PointAdd(center_point, get_area_center(outer_curve))
             outer_curves.append(outer_curve)
         center_point = rs.CreatePoint(center_point.X/(len(curve_groups) + 1), center_point.Y/(len(curve_groups) + 1), l*t.get_layer_height())
-        center_points.append(center_point)
 
         # combine separated curves if they are within nozzle_width/2 of one another
         idx_groups = {c:[c] for c in range(len(outer_curves))}
@@ -224,6 +221,7 @@ def build_vertical_tree(t, shape):
             node.name = str(l) + str(c)
             node.depth = l
             node.height = l
+            node.center_point = center_point
             new_nodes.append(node)
             if root in previous_nodes:
                 node.parent = root
@@ -239,17 +237,14 @@ def build_vertical_tree(t, shape):
                 node.needs_support = True
             else: node.needs_support = False
 
-            # may need to address picking the first outer_curve
-            # in the group of outer_curves, if more than one
-            pnts = rs.DivideCurve(outer_curve_groups[c][0], 100)
-            node.start_point = pnts[closest_point(center_point, pnts)[0]]
-
         previous_nodes = new_nodes
+
+    print("Average time for slicing curves: "+str(round(curve_time/l, 3))+" seconds")
 
     print("Initial treeing time: "+str(round(time.time() - start_time, 3))+" seconds")
     print("Initial height tree size: "+str(len(root.get_all_nodes([]))))
 
-    return root, center_points
+    return root
 
 def segment_tree_by_height(t, tree, total_height):
     limit = nozzle_height / t.get_layer_height()
@@ -433,13 +428,13 @@ def union_curves_on_xy_plane(curves):
     if curves!=None:
         if len(curves) > 1:
             try:
-                return rs.CurveBooleanUnion([rs.CopyObject(curve, rs.AddPoint(0, 0, -rs.CurveStartPoint(curve).Z)) for curve in curves if rs.IsCurve(curve) and rs.IsCurveClosed(curve)])
+                return rs.CurveBooleanUnion([rs.CopyObject(curve, [0, 0, -rs.CurveStartPoint(curve).Z]) for curve in curves if rs.IsCurve(curve) and rs.IsCurveClosed(curve)])
             except Exception as err:
                 for curve in curves:
                     print(curve, rs.ObjectType(curve))
                 raise ValueError(err)
         elif len(curves) == 1:
-            return [rs.CopyObject(curve, rs.AddPoint(0, 0, -rs.CurveStartPoint(curve).Z)) for curve in curves if curve!=None and rs.IsCurve(curve) and rs.IsCurveClosed(curve)]
+            return [rs.CopyObject(curve, [0, 0, -rs.CurveStartPoint(curve).Z]) for curve in curves if curve!=None and rs.IsCurve(curve) and rs.IsCurveClosed(curve)]
         else:
             raise ValueError("Called union_curves_on_xy_plane with no curves")
 
