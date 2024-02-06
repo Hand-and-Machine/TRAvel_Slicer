@@ -14,7 +14,7 @@ class Graph:
         self.print_exceeded = True
 
         self.path = None
-        self.max_paths = 10
+        self.max_paths = 20
         self.path_found = False
 
         self.path_check = None

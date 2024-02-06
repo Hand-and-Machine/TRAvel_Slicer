@@ -866,7 +866,7 @@ def slice_vertical_and_fermat_fill(t, shape, all_curves, wall_mode=False, walls=
                     travel_paths = travel_paths + fill_curves_with_fermat_spiral(t, curves, bboxes=boxes, move_up=move_up, start_pnt=start_point, initial_offset=initial_offset)[0]
                 else:
                     travel_paths = travel_paths + fill_curves_with_fermat_spiral(t, curves, bboxes=boxes, move_up=move_up, start_pnt=start_point, wall_mode=wall_mode, walls=walls, initial_offset=initial_offset)[0]
-            move_xy = False
+            move_up = False
         if node_path[s].data.box!=None: boxes.append(node_path[s].data.box)
         move_up = True
 
@@ -874,53 +874,3 @@ def slice_vertical_and_fermat_fill(t, shape, all_curves, wall_mode=False, walls=
     print("Full path generation: "+str(round(time.time()-overall_start_time, 3))+" seconds")
 
     return travel_paths, tree, node_path, edges
-
-
-def slice_2_half_D_fermat(t, curves, layers=3, wall_mode=False, walls=3, fill_bottom=False, bottom_layers=3, initial_offset=0.5):
-    groups = get_curve_groupings(curves)
-    group = groups[0]
-
-    curve = group[0]
-    if len(group) > 1:
-        curve = connect_curves(curves, float(t.get_extrude_width())/8)
-
-    first_contours = get_isocontour(curve, float(t.get_extrude_width())*initial_offset)
-    root = Node('root')
-    root.depth = -1
-    isocontours = first_contours
-    for crv in first_contours:
-        node = root.add_child(crv)
-        new_curves = get_isocontours(t, crv, node, wall_mode=wall_mode, walls=walls)
-        if new_curves:
-            isocontours = isocontours + new_curves
-
-    travel_paths = []
-
-    region_tree = segment_tree(root)
-    all_nodes = region_tree.get_all_nodes([])
-
-    for l in range(layers):
-        for n in all_nodes:
-            if len(n.sub_nodes) > 0:
-                num_pnts = get_num_points(n.sub_nodes[0], float(t.get_extrude_width()))
-                if n.type == 1:
-                    start_idx, d = closest_point(t.get_position(), rs.DivideCurve(n.sub_nodes[0], num_pnts))
-                    spiral, indices = spiral_contours(t, n.sub_nodes, start_idx)
-                    n.fermat_spiral = fermat_spiral(t, spiral, indices)
-                elif n.type == 2:
-                    n.fermat_spiral = rs.DivideCurve(n.sub_nodes[0], num_pnts)
-            else:
-                print("Error: node with no curves in it at all", n)
-
-        final_points = connect_spiralled_nodes(t, region_tree)
-        final_curve = rs.AddCurve(final_points)
-        final_spiral = rs.DivideCurve(final_curve, int(rs.CurveLength(final_curve)/t.get_resolution()))
-
-        t.pen_up()
-        #travel_paths.append(rs.AddCurve([t.get_position(), final_spiral[0]]))
-        t.set_position(final_spiral[0].X, final_spiral[0].Y, t.get_layer_height()*l)
-        t.pen_down()
-        for p in final_spiral:
-            t.set_position(p.X, p.Y, t.get_layer_height()*l)
-
-    return travel_paths
