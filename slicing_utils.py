@@ -20,7 +20,7 @@ from graph_utils import *
 
 max_z = 0
 
-def draw_points(t, points, start_idx=0, bboxes=[], move_up=False):
+def draw_points(t, points, start_idx=0, bboxes=[], move_up=True):
     global max_z
 
     travel = []
@@ -28,7 +28,7 @@ def draw_points(t, points, start_idx=0, bboxes=[], move_up=False):
         t.pen_up()
         pos = t.get_position()
         nozzle_width = t.get_nozzle_width()
-        if move_up or rs.Distance(pos, points[start_idx]) > max(nozzle_width, t.get_layer_height()*2):
+        if move_up and rs.Distance(pos, points[start_idx]) > max(nozzle_width, t.get_layer_height()*2):
             z_lift = 2*float(t.get_layer_height())
             higher_z = max(pos.Z, points[start_idx].Z)+z_lift
             # go up layer_height*2, go to start position of next start + layer_height*2
@@ -617,7 +617,7 @@ def get_edge_tuples(graph):
     return sorted(ordered_edges, key=lambda x: x[2], reverse=True)
 
 
-def fill_curves_with_fermat_spiral(t, curves, bboxes=[], start_pnt=None, wall_mode=False, walls=3, wall_first=False, initial_offset=0.5):
+def fill_curves_with_fermat_spiral(t, curves, bboxes=[], move_up=True, start_pnt=None, wall_mode=False, walls=3, wall_first=False, initial_offset=0.5):
     extrude_width = float(t.get_extrude_width())
 
     # connect curves if given more than one
@@ -680,16 +680,16 @@ def fill_curves_with_fermat_spiral(t, curves, bboxes=[], start_pnt=None, wall_mo
         if start_pnt: start_idx, d = closest_point(start_pnt, outer_points)
 
         if wall_first:
-            travel_paths = travel_paths + draw_points(t, outer_points, start_idx, bboxes=bboxes)
+            travel_paths = travel_paths + draw_points(t, outer_points, start_idx, bboxes=bboxes, move_up=move_up)
             final_spiral = final_spiral + outer_points
         for region in inner_regions:
             region_curve = rs.AddCurve(region)
             region_points = rs.DivideCurve(region_curve, int(rs.CurveLength(region_curve)/t.get_resolution()))
             if region_points==None: region_points = region
-            travel_paths = travel_paths + draw_points(t, region_points, 0, bboxes=bboxes)
+            travel_paths = travel_paths + draw_points(t, region_points, 0, bboxes=bboxes, move_up=move_up)
             final_spiral = final_spiral + region_points
         if not wall_first:
-            travel_paths = travel_paths + draw_points(t, outer_points, start_idx, bboxes=bboxes)
+            travel_paths = travel_paths + draw_points(t, outer_points, start_idx, bboxes=bboxes, move_up=move_up)
             final_spiral = final_spiral + outer_points
 
     return travel_paths, final_spiral
@@ -852,6 +852,7 @@ def slice_vertical_and_fermat_fill(t, shape, all_curves, wall_mode=False, walls=
 
     start_point = node_path[0].data.sub_nodes[0].start_point
     boxes = []
+    move_up = False
     for s in range(len(node_path)):
         if node_path[s].data.height!=node_path[s-1].data.height:
             # only compare to boxes within nozzle height chunk
@@ -862,10 +863,12 @@ def slice_vertical_and_fermat_fill(t, shape, all_curves, wall_mode=False, walls=
             start_point = t.get_position()
             for curves in node.data:
                 if not wall_mode or (wall_mode and fill_bottom and node.height<bottom_layers):
-                    travel_paths = travel_paths + fill_curves_with_fermat_spiral(t, curves, bboxes=boxes, start_pnt=start_point, initial_offset=initial_offset)[0]
+                    travel_paths = travel_paths + fill_curves_with_fermat_spiral(t, curves, bboxes=boxes, move_up=move_up, start_pnt=start_point, initial_offset=initial_offset)[0]
                 else:
-                    travel_paths = travel_paths + fill_curves_with_fermat_spiral(t, curves, bboxes=boxes, start_pnt=start_point, wall_mode=wall_mode, walls=walls, initial_offset=initial_offset)[0]
+                    travel_paths = travel_paths + fill_curves_with_fermat_spiral(t, curves, bboxes=boxes, move_up=move_up, start_pnt=start_point, wall_mode=wall_mode, walls=walls, initial_offset=initial_offset)[0]
+            move_xy = False
         if node_path[s].data.box!=None: boxes.append(node_path[s].data.box)
+        move_up = True
 
     print("Fermat Spiraling time: "+str(round(time.time()-fermat_time, 3))+" seconds")
     print("Full path generation: "+str(round(time.time()-overall_start_time, 3))+" seconds")
