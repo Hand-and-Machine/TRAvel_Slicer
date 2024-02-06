@@ -66,12 +66,6 @@ def get_isocontour(curve, offset):
     points = rs.DivideCurve(curve, num_pnts)
     grid = Grid(points, offset/2)
 
-    winding_order, direction = get_winding_order(curve, points, offset)
-
-    if winding_order == None:
-        print("Error: winding order could not return a direction")
-        return None
-
     # determine each new p' at distance offset away from p
     new_points = [None]*len(points)
     discarded_points = [None]*len(points)
@@ -81,8 +75,10 @@ def get_isocontour(curve, offset):
 
         # get tangent vector
         tangent = rs.VectorSubtract(points[next_i], points[prev_i])
+        # get "up" vector
+        up = rs.VectorSubtract(rs.CreatePoint(points[i].X, points[i].Y, points[i].Z+1.0), points[i])
         # get vector orthogonal to tangent vector
-        ortho = rs.VectorRotate(tangent, direction, [0, 0, 1])
+        ortho = rs.VectorCrossProduct(up, tangent)
         # normalize and scale orthogonal vector
         ortho = rs.VectorScale(ortho, offset/rs.VectorLength(ortho))
         # compute new point

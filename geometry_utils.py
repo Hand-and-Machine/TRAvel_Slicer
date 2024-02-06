@@ -70,31 +70,6 @@ def get_num_points(curve, tolerance):
     return max(int(rs.CurveLength(curve)/(float(tolerance)*k)), 4)
 
 
-def get_winding_order(curve, points, offset):
-    # get winding order, CW or CCW
-    winding_order = None
-
-    for i in range(4):
-        index = i*(len(points)/4)
-
-        tangent = rs.VectorSubtract(points[index+1], points[index-1])
-        pnt_cw = rs.VectorAdd(points[index], rs.VectorScale(rs.VectorUnitize(rs.VectorRotate(tangent, -90, [0, 0, 1])), offset/20))
-        pnt_ccw = rs.VectorAdd(points[index], rs.VectorScale(rs.VectorUnitize(rs.VectorRotate(tangent, 90, [0, 0, 1])), offset/20))
-
-        direction = None
-        if rs.PointInPlanarClosedCurve(pnt_cw, curve):
-            print("Weird! Winding order was counter-clockwise")
-            winding_order = "CW"
-            direction = -90
-            break
-        elif rs.PointInPlanarClosedCurve(pnt_ccw, curve):
-            winding_order = "CCW"
-            direction = 90
-            break
-
-    return winding_order, direction
-
-
 def closest_point(point, points):
     closest = {"point": None, "distance": 1000000}
     for p in range(len(points)):
@@ -133,15 +108,36 @@ def get_shortest_indices(start, end, points):
     return indices
 
 
-def get_curves(shape, z, retry=0):
-    if z == 0:
-        z = 0.1
-    plane = get_plane(float(z))
-    s_time = time.time()
-    initial_curves = rs.AddSrfContourCrvs(shape, plane)
-    print("Surface contour time: "+str(round(time.time()-s_time, 3))+" seconds")
+def get_curves(shape, z, retry=0, initial_curves=None):
+    if initial_curves==None:
+        if z == 0:
+            z = 0.1
+        plane = get_plane(float(z))
+        s_time = time.time()
+        initial_curves = rs.AddSrfContourCrvs(shape, plane)
+        print("Surface contour time: "+str(round(time.time()-s_time, 3))+" seconds")
 
-    if len(initial_curves) > 1: initial_curves = rs.JoinCurves(initial_curves)
+    curves = repair_curves(initial_curves)
+
+    if initial_curves > 0 and len(curves) == 0 and retry==0:
+        print("Slicing shape at height "+str(z)+" was unsuccessful. Retrying at "+str(round(float(z)+0.01, 3))+".")
+        return get_curves(shape, float(z)+0.01, retry=retry+1, initial_curves=None)
+    elif initial_curves > 0 and len(curves) == 0 and retry==1:
+        print("Slicing shape at height "+str(z)+" was unsuccessful. Retrying at "+str(round(float(z)-0.02, 3))+".")
+        return get_curves(shape, float(z)-0.02, retry=retry+1, initial_curves=None)
+
+    try:
+        curve_groups = get_curve_groupings(curves)
+        if retry>0: print("Success after retry at height "+str(z))
+        return curve_groups
+    except Exception as err:
+        print("Could not group curves at height "+str(z), err)
+        return [curves]
+
+
+def repair_curves(initial_curves):
+    if len(initial_curves) > 1:
+        initial_curves = rs.JoinCurves(initial_curves)
 
     curves = []
     for curve in initial_curves:
@@ -152,24 +148,11 @@ def get_curves(shape, z, retry=0):
                 if rs.IsCurveClosable(curve):
                     curves.append(rs.CloseCurve(curve))
                 else:
-                    print("Slice: curve is not closed and is not closable at height "+str(z))
+                    print("Slice: curve is not closed and is not closable at height "+str(rs.CurveStartPoint(curve).Z))
             else:
                 curves.append(curve)
 
-    if initial_curves > 0 and len(curves) == 0 and retry==0:
-        print("Slicing shape at height "+str(z)+" was unsuccessful. Retrying.")
-        return get_curves(shape, float(z)-0.01, retry+1)
-    elif initial_curves > 0 and len(curves) == 0 and retry==1:
-        print("Slicing shape at height "+str(z)+" was unsuccessful. Retrying.")
-        return get_curves(shape, float(z)+0.02, retry+1)
-
-    try:
-        curve_groups = get_curve_groupings(curves)
-        if retry>0: print("Success after retry at height "+str(z))
-        return curve_groups
-    except Exception as err:
-        print("Could not group curves at height "+str(z), err)
-        return [curves]
+    return curves
 
 
 def get_curve_groupings(curves):

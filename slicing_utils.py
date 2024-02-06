@@ -75,6 +75,10 @@ def draw_points(t, points, start_idx=0, bboxes=[], move_up=False):
     return travel
 
 
+def check_path_intersection(t, path, boxes):
+    print()
+
+
 def get_corner(t, outer_curve, inner_curve, points):
     offset = float(t.get_extrude_width())
 
@@ -838,35 +842,35 @@ def slice_contour_fill(t, shape, start=0, end=None, wall_mode=False, walls=3, fi
     return travel_paths
 
 
-def slice_vertical_and_fermat_fill(t, shape, wall_mode=False, walls=3, fill_bottom=False, bottom_layers=3, initial_offset=0.5):
+def slice_vertical_and_fermat_fill(t, shape, all_curves, wall_mode=False, walls=3, fill_bottom=False, bottom_layers=3, initial_offset=0.5):
     overall_start_time = time.time()
 
     travel_paths = []
-    tree, path, edges = best_vertical_path(t, shape)
+    tree, node_path, path, edges = best_vertical_path(t, shape, all_curves)
 
     fermat_time = time.time()
 
-    start_point = path[0].data.sub_nodes[0].start_point
+    start_point = node_path[0].data.sub_nodes[0].start_point
     boxes = []
-    for s in range(len(path)):
-        if path[s].data.height!=path[s-1].data.height:
+    for s in range(len(node_path)):
+        if node_path[s].data.height!=node_path[s-1].data.height:
             # only compare to boxes within nozzle height chunk
             boxes = []
 
-        for node in path[s].data.sub_nodes:
-            #print("Layer "+str(node.height))
+        for node in node_path[s].data.sub_nodes:
+            print("Layer "+str(node.height)+", z: "+str(rs.CurveStartPoint(node.data[0][0]).Z))
             start_point = t.get_position()
             for curves in node.data:
                 if not wall_mode or (wall_mode and fill_bottom and node.height<bottom_layers):
                     travel_paths = travel_paths + fill_curves_with_fermat_spiral(t, curves, bboxes=boxes, start_pnt=start_point, initial_offset=initial_offset)[0]
                 else:
                     travel_paths = travel_paths + fill_curves_with_fermat_spiral(t, curves, bboxes=boxes, start_pnt=start_point, wall_mode=wall_mode, walls=walls, initial_offset=initial_offset)[0]
-        if path[s].data.box!=None: boxes.append(path[s].data.box)
+        if node_path[s].data.box!=None: boxes.append(node_path[s].data.box)
 
     print("Fermat Spiraling time: "+str(round(time.time()-fermat_time, 3))+" seconds")
     print("Full path generation: "+str(round(time.time()-overall_start_time, 3))+" seconds")
 
-    return travel_paths, tree, path, edges
+    return travel_paths, tree, node_path, edges
 
 
 def slice_2_half_D_fermat(t, curves, layers=3, wall_mode=False, walls=3, fill_bottom=False, bottom_layers=3, initial_offset=0.5):

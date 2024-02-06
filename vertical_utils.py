@@ -17,7 +17,7 @@ from geometry_utils import *
 
 
 # My vertical path finding code
-def best_vertical_path(t, shape):
+def best_vertical_path(t, shape, curves):
     vert_start_time = time.time()
 
     global nozzle_width
@@ -32,9 +32,9 @@ def best_vertical_path(t, shape):
     global sub_crvs
     sub_crvs = {}
 
-    init_tree = build_vertical_tree(t, shape)
-
-    vert_tree = segment_tree_by_height(t, init_tree, get_shape_height(shape))
+    total_height = len(curves)*t.get_layer_height()
+    init_tree = build_vertical_tree(t, shape, curves)
+    vert_tree = segment_tree_by_height(t, init_tree, total_height)
     if len(vert_tree.get_all_nodes([])) > len(init_tree.get_all_nodes([])):
         raise ValueError("There should not be more super nodes than nodes")
 
@@ -92,9 +92,8 @@ def best_vertical_path(t, shape):
     # edges are used for debugging and visualization rather than further calculations
     edges = []
 
-    path = []
-    height = get_shape_height(shape)
-    for h in range(int(math.floor(height / nozzle_height))+1):
+    node_path = []
+    for h in range(int(math.floor(total_height / nozzle_height))+1):
         nodes_at_height = [node for node in all_nodes if node.height == h]
         print("Nodes at nozzle height "+str(h)+": "+str(len(nodes_at_height)))
         if len(nodes_at_height) == 0: break
@@ -112,7 +111,7 @@ def best_vertical_path(t, shape):
                 min_height = node.min_sub_height
 
         prev_node = None
-        if len(path)>0: prev_node = path[-1]
+        if len(node_path)>0: prev_node = node_path[-1]
         for node in height_graph.nodes:
             if node.data.min_sub_height == min_height:
                 weight = 0
@@ -153,32 +152,33 @@ def best_vertical_path(t, shape):
 
         start_time = time.time()
         path_section = height_graph.get_shortest_hamiltonian_path()[0]
-        path = path + path_section
+        node_path = node_path + path_section
         print("Hamiltonian Path Search Time: "+str(round(time.time() - start_time, 3))+" seconds")
         print('')
 
+    path = []
+    for node in node_path:
+        for sub in node.data.sub_nodes:
+            path.append(sub.data)
+
     print("Graph construction and all hamiltonian paths search time: "+str(round(time.time() - st_time, 3))+" seconds")
     print("Total Vertical Path search time: "+str(round(time.time() - vert_start_time, 3))+" seconds")
-    return vert_tree, path, edges
+    return vert_tree, node_path, path, edges
 
 
-def build_vertical_tree(t, shape):
+def build_vertical_tree(t, shape, all_curves):
     start_time = time.time()
 
-    layers = int(math.floor(get_shape_height(shape) / t.get_layer_height()))
+    print('Number of layers: '+str(len(all_curves)))
+
     root = Node('root')
     root.name = 'root'
 
-    print('Number of layers:'+str(layers))
-
-    curve_time = 0
-
     center_point = rs.CreatePoint(0, 0, 0)
     previous_nodes = [root]
-    for l in range(layers + 1):
-        s_time = time.time()
-        curve_groups = get_curves(shape, l*t.get_layer_height())
-        curve_time = curve_time + time.time()-s_time
+    for l in range(len(all_curves)):
+        initial_curves = all_curves[l]
+        curve_groups = get_curves(shape, rs.CurveStartPoint(initial_curves[0]).Z, initial_curves=initial_curves)
 
         outer_curves = []
         for crvs in curve_groups:
@@ -239,8 +239,6 @@ def build_vertical_tree(t, shape):
             else: node.needs_support = False
 
         previous_nodes = new_nodes
-
-    print("Average time for slicing curves: "+str(round(curve_time/l, 3))+" seconds")
 
     print("Initial treeing time: "+str(round(time.time() - start_time, 3))+" seconds")
     print("Initial height tree size: "+str(len(root.get_all_nodes([]))))
