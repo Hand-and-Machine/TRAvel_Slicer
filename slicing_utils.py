@@ -48,7 +48,7 @@ def draw_points(t, points, start_idx=0, bboxes=[], move_up=True):
                 rs.CreatePoint(points1[1].X, points1[1].Y, max_z),
                 rs.CreatePoint(points1[0].X, points1[0].Y, max_z)])
             intersect1 = []
-            for b in (range(len(bboxes)-1, -1, -1)):
+            for b in (range(len(bboxes)-2, -1, -1)):
                 int1 = rs.IntersectBreps(surf1, bboxes[b], nozzle_width/2)
                 if int1 != None:
                     intersect1.append(int1)
@@ -857,9 +857,10 @@ def slice_vertical_and_fermat_fill(t, shape, all_curves, wall_mode=False, walls=
         if node_path[s].data.height!=node_path[s-1].data.height:
             # only compare to boxes within nozzle height chunk
             boxes = []
+        if node_path[s].data.box!=None: boxes.append(node_path[s].data.box)
 
         for node in node_path[s].data.sub_nodes:
-            print("Layer "+str(node.height)+", z: "+str(rs.CurveStartPoint(node.data[0][0]).Z))
+            #print("Layer "+str(node.height)+", z: "+str(rs.CurveStartPoint(node.data[0][0]).Z))
             start_point = t.get_position()
             for curves in node.data:
                 if not wall_mode or (wall_mode and fill_bottom and node.height<bottom_layers):
@@ -867,7 +868,6 @@ def slice_vertical_and_fermat_fill(t, shape, all_curves, wall_mode=False, walls=
                 else:
                     travel_paths = travel_paths + fill_curves_with_fermat_spiral(t, curves, bboxes=boxes, move_up=move_up, start_pnt=start_point, wall_mode=wall_mode, walls=walls, initial_offset=initial_offset)[0]
             move_up = False
-        if node_path[s].data.box!=None: boxes.append(node_path[s].data.box)
         move_up = True
 
     print("Fermat Spiraling time: "+str(round(time.time()-fermat_time, 3))+" seconds")

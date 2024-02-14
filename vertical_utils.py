@@ -25,12 +25,14 @@ def best_vertical_path(t, shape, curves):
     global nozzle_height
     nozzle_height = float(t.get_nozzle_height())
 
-    global overlap_super
-    overlap_super = {}
+    global xy_plane_crvs
+    xy_plane_crvs = {}
+    global path_overlap
+    path_overlap = {}
+    global overlap_above
+    overlap_above = {}
     global overlap
     overlap = {}
-    global sub_crvs
-    sub_crvs = {}
 
     total_height = len(curves)*t.get_layer_height()
     init_tree = build_vertical_tree(t, shape, curves)
@@ -182,7 +184,9 @@ def build_vertical_tree(t, shape, all_curves):
 
         outer_curves = []
         for crvs in curve_groups:
-            outer_curve = union_curves(crvs)[0]
+            # curve grouping function returns outermost
+            # contour as first curve in curve_group list
+            outer_curve = crvs[0]
             center_point = rs.PointAdd(center_point, get_area_center(outer_curve))
             outer_curves.append(outer_curve)
         center_point = rs.CreatePoint(center_point.X/(len(curve_groups) + 1), center_point.Y/(len(curve_groups) + 1), l*t.get_layer_height())
@@ -191,7 +195,8 @@ def build_vertical_tree(t, shape, all_curves):
         idx_groups = {c:[c] for c in range(len(outer_curves))}
         for c1 in range(len(outer_curves)):
             for c2 in range(c1+1, len(outer_curves)):
-                if rs.PlanarClosedCurveContainment(outer_curves[c1], outer_curves[c2], tolerance=nozzle_width/2) > 0:
+                #if rs.PlanarClosedCurveContainment(outer_curves[c1], outer_curves[c2], tolerance=nozzle_width/2) > 0:
+                if dynamic_curve_overlap_check(curve_groups[c1], curve_groups[c2], nozzle_width):
                     idx_groups[c1].append(c2)
 
         # iterate through idx_groups
@@ -229,7 +234,7 @@ def build_vertical_tree(t, shape, all_curves):
                 root.children.append(node)
             else:
                 for prev_n in previous_nodes:
-                    if not node.parent and is_overlapping(node, prev_n, 0):
+                    if not node.parent and is_sub_node_overlapping_above(node, prev_n, 0):
                         node.parent = prev_n
                         prev_n.children.append(node)
 
@@ -240,6 +245,7 @@ def build_vertical_tree(t, shape, all_curves):
 
         previous_nodes = new_nodes
 
+    print('')
     print("Initial treeing time: "+str(round(time.time() - start_time, 3))+" seconds")
     print("Initial height tree size: "+str(len(root.get_all_nodes([]))))
 
@@ -360,7 +366,7 @@ def subdivide_by_overlap(nodes):
                     above = False
                     below = False
                     for s2 in node2.sub_nodes:
-                        if curve_overlap_check(s1, s2, nozzle_width):
+                        if layer_overlap_check(s1, s2, nozzle_width):
                             if s1.height > s2.height:
                                 above = True
                             if s1.height < s2.height:
@@ -438,17 +444,63 @@ def union_curves_on_xy_plane(curves):
             raise ValueError("Called union_curves_on_xy_plane with no curves")
 
 
-def curve_overlap_check(curves1, curves2, width):
-    if sub_crvs.get(curves1) == None:
-        sub_crvs[curves1] = union_curves_on_xy_plane([crv for g in curves1.data for crv in g])
-    if sub_crvs.get(curves2) == None:
-        sub_crvs[curves2] = union_curves_on_xy_plane([crv for g in curves2.data for crv in g])
+def layer_overlap_check(sub1, sub2, width):
+    if xy_plane_crvs.get(sub1) == None:
+        xy_plane_crvs[sub1] = []
+        for crvs in sub1.data:
+            xy_plane_crvs[sub1].append([rs.CopyObject(curve, [0, 0, -rs.CurveStartPoint(curve).Z]) for curve in crvs if curve!=None and rs.IsCurve(curve) and rs.IsCurveClosed(curve)])
+    if xy_plane_crvs.get(sub2) == None:
+        xy_plane_crvs[sub2] = []
+        for crvs in sub2.data:
+            xy_plane_crvs[sub2].append([rs.CopyObject(curve, [0, 0, -rs.CurveStartPoint(curve).Z]) for curve in crvs if curve!=None and rs.IsCurve(curve) and rs.IsCurveClosed(curve)])
 
-    for curve1 in sub_crvs[curves1]:
-        for curve2 in sub_crvs[curves2]:
-            # curve1 intersects curve2, curve1 is in curve2, or curve2 is in curve1
-            if rs.PlanarClosedCurveContainment(curve1, curve2, tolerance=width/2) > 0:
+    for curves1 in xy_plane_crvs[sub1]:
+        for curves2 in xy_plane_crvs[sub2]:
+            if dynamic_curve_overlap_check(curves1, curves2, width): return True
+    return False
+
+
+def dynamic_curve_overlap_check(curves1, curves2, width):
+    if overlap.get(curves1[0]) == None or overlap[curves1[0]].get(curves2[0]) == None or overlap[curves1[0]][curves2[0]].get(width) == None:
+        if overlap.get(curves1[0]) == None: overlap[curves1[0]] = {}
+        if overlap[curves1[0]].get(curves2[0]) == None: overlap[curves1[0]][curves2[0]] = {}
+        overlap[curves1[0]][curves2[0]][width] = curve_overlap_check(curves1, curves2, width)
+
+        if overlap.get(curves2[0]) == None: overlap[curves2[0]] = {}
+        if overlap[curves2[0]].get(curves1[0]) == None: overlap[curves2[0]][curves1[0]] = {}
+        overlap[curves2[0]][curves1[0]][width] = overlap[curves1[0]][curves2[0]][width]
+
+    return overlap[curves1[0]][curves2[0]][width]
+
+
+def curve_overlap_check(curves1, curves2, width):
+    outer1 = curves1[0]
+    inners1 = curves1[1:]
+
+    outer2 = curves2[0]
+    inners2 = curves2[1:]
+    intersection = rs.PlanarClosedCurveContainment(outer1, outer2, tolerance=width/2)
+    if intersection == 1:
+        # curve 1 intersects curve 2
+        return True
+    elif intersection > 1:
+        if intersection == 2:
+            # outer curve 1 is in outer curve 2
+            outer = outer1
+            inners = inners2
+        if intersection == 3:
+            # outer curve 2 is in outer curve 1
+            outer = outer2
+            inners = inners1
+
+        for inner in inners:
+            intersection = rs.PlanarClosedCurveContainment(outer, inner, tolerance=width/2)
+            if intersection == 1 or intersection==3:
                 return True
+            elif intersection == 2:
+                # outer curve is inside an inner curve
+                return False
+        return True
     return False
 
 
@@ -459,12 +511,12 @@ def check_path(next_node, path, graph=None):
         return False
 
     for node in path:
-        if overlap_super.get(next_node) == None or overlap_super[next_node].get(node) == None:
-            if overlap_super.get(next_node) == None:
-                overlap_super[next_node] = {}
-            overlap_super[next_node][node] = check_layers_for_overlap(node.data.sub_nodes, next_node.data.sub_nodes)
+        if path_overlap.get(next_node) == None or path_overlap[next_node].get(node) == None:
+            if path_overlap.get(next_node) == None:
+                path_overlap[next_node] = {}
+            path_overlap[next_node][node] = check_layers_for_overlap(node.data.sub_nodes, next_node.data.sub_nodes)
 
-        if overlap_super[next_node][node]==True:
+        if path_overlap[next_node][node]==True:
             return False
     return True
 
@@ -475,17 +527,17 @@ def check_layers_for_overlap(sub_nodes1, sub_nodes2):
     if sub_nodes1[-1].height >= sub_nodes2[0].height:
         for sub1 in sub_nodes1:
             for sub2 in sub_nodes2:
-                if is_overlapping(sub1, sub2, nozzle_width):
+                if is_sub_node_overlapping_above(sub1, sub2, nozzle_width):
                     return True
     return False
 
 
 # is sub1 overlapping sub2?
-def is_overlapping(sub1, sub2, width):
-    if overlap.get(sub1) == None or overlap[sub1].get(sub2) == None or overlap[sub1][sub2].get(width) == None:
-        if overlap.get(sub1) == None:
-            overlap[sub1] = {}
-        if overlap[sub1].get(sub2) == None:
-            overlap[sub1][sub2] = {}
-        overlap[sub1][sub2][width] = (sub1.height > sub2.height) and curve_overlap_check(sub1, sub2, width)
-    return overlap[sub1][sub2][width]
+def is_sub_node_overlapping_above(sub1, sub2, width):
+    if overlap_above.get(sub1) == None or overlap_above[sub1].get(sub2) == None or overlap_above[sub1][sub2].get(width) == None:
+        if overlap_above.get(sub1) == None:
+            overlap_above[sub1] = {}
+        if overlap_above[sub1].get(sub2) == None:
+            overlap_above[sub1][sub2] = {}
+        overlap_above[sub1][sub2][width] = (sub1.height > sub2.height) and layer_overlap_check(sub1, sub2, width)
+    return overlap_above[sub1][sub2][width]

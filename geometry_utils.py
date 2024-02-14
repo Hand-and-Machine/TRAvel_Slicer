@@ -5,15 +5,39 @@ import time
 
 def get_area(curve):
     try:
-        return rs.Area(curve)
+        areaMass = Rhino.Geometry.AreaMassProperties.Compute(curve)
+        area = areaMass.Area
+        return area, True
     except:
-        return 0
+        try:
+            area = rs.CurveAreaCentroid(rs.coercecurve(curve))
+            return area[1], True
+        except Exception as err:
+            print(err)
+            length = rs.CurveLength(curve)
+            print("Could not get area of curve. Curve is closed: "+str(curve.IsClosed)+". Curve length: "+str(length), curve)
+            return 0, False
+
 
 def get_area_center(curve):
     try:
-        return rs.CurveAreaCentroid(curve)[0]
+        areaMass = curve.AreaMassProperties.Compute()
+        center = areaMass.Centroid
+        return center
     except:
-        return rs.CreatePoint(0, 0, 0)
+        try:
+            return rs.CurveAreaCentroid(rs.coercecurve(curve))[0]
+        except:
+            try:
+                bbox = rs.BoundingBox(curve)
+                center = bbox[0] + 0.5*(bbox[2]-bbox[0])
+                return center
+            except Exception as err:
+                print(err)
+                length = rs.CurveLength(curve)
+                print("Could not get centroid of curve. Curve is closed: "+str(curve.IsClosed)+". Curve length: "+str(length), curve)
+                return rs.CreatePoint(0, 0, rs.CurveStartPoint(curve).Z)
+
 
 def get_size(shape):
     # bounding box of shape
