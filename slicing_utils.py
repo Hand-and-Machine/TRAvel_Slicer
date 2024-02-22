@@ -79,19 +79,19 @@ def check_path_intersection(t, path, boxes):
     print()
 
 
-def get_corner(t, outer_curve, inner_curve, points):
+def get_corner(t, outer_curve, inner_curve):
     offset = float(t.get_extrude_width())
 
     prec = 100
-    pnts = rs.DivideCurve(inner_curve, prec)
-    center = (sum([p.X for p in pnts])/prec, sum([p.Y for p in pnts])/prec, sum([p.Z for p in pnts])/prec)
+    outer_points = rs.DivideCurve(outer_curve, prec)
+    center = get_area_center(inner_curve)
 
     closest = {"point": 0, "distance": 1000000}
 
-    for p in range(len(points)):
-        pnt = points[p]
-        prev_pnt = points[(p-1) % len(points)]
-        next_pnt = points[(p+1) % len(points)]
+    for p in range(len(outer_points)):
+        pnt = outer_points[p]
+        prev_pnt = outer_points[(p-1) % len(outer_points)]
+        next_pnt = outer_points[(p+1) % len(outer_points)]
         v1 = rs.VectorUnitize(rs.VectorSubtract(prev_pnt, pnt))
         v2 = rs.VectorUnitize(rs.VectorSubtract(next_pnt, pnt))
         dot = rs.VectorDotProduct(v1, v2)
@@ -108,7 +108,7 @@ def get_corner(t, outer_curve, inner_curve, points):
                 inside = rs.PointInPlanarClosedCurve(rs.VectorAdd(pnt, rs.VectorScale(rs.VectorUnitize(add), offset/4)), outer_curve)
                 if dist < closest["distance"] and inside:
                     closest["distance"] = dist
-                    closest["point"] = p
+                    closest["point"] = pnt
 
     return closest["point"]
 
@@ -191,9 +191,12 @@ def spiral_contours(t, isocontours, start_index=0):
     return spiral, spiral_contour_indices
 
 
-def fermat_spiral(t, isocontours, start_param):
+def fermat_spiral(t, isocontours, start_pnt):
+    isocontours = [crv for crv in isocontours]
+
     offset = float(t.get_extrude_width())
 
+    start_param = rs.CurveClosestPoint(isocontours[0], start_pnt)
     start = rs.EvaluateCurve(isocontours[0], start_param)
     split_circ = rs.AddCircle(start, offset)
     intersection = rs.CurveCurveIntersection(isocontours[0], split_circ)
@@ -632,6 +635,11 @@ def fill_curves_with_fermat_spiral(t, curves, bboxes=[], move_up=True, start_pnt
     final_spiral = []
     travel_paths = []
 
+    time1 = 0
+    time2 = 0
+    count1 = 0
+    count2 = 0
+
     # Spiralling Regions
     # if generating the first isocontour resulted in multiple
     # regions, we have to handle them separately
@@ -645,7 +653,11 @@ def fill_curves_with_fermat_spiral(t, curves, bboxes=[], move_up=True, start_pnt
                 if len(n.sub_nodes) > 1:
                     num_pnts = get_num_points(n.sub_nodes[0], extrude_width)
                     if n.type == 1:
-                        n.fermat_spiral = fermat_spiral(t, n.sub_nodes, rs.CurveClosestPoint(n.sub_nodes[0], t.get_position()))
+                        if not n.parent:
+                            start_point = rs.EvaluateCurve(n.sub_nodes[0], rs.CurveClosestPoint(n.sub_nodes[0], t.get_position()))
+                        else:
+                            start_point = get_corner(t, n.sub_nodes[0], n.sub_nodes[-1])
+                        n.fermat_spiral = fermat_spiral(t, n.sub_nodes, start_point)
                     elif n.type == 2:
                         n.fermat_spiral = rs.DivideCurve(n.sub_nodes[0], num_pnts)
                 elif len(n.sub_nodes) == 1:
