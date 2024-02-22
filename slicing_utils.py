@@ -191,10 +191,9 @@ def spiral_contours(t, isocontours, start_index=0):
     return spiral, spiral_contour_indices
 
 
-def fermat_spiral(t, isocontours, start_pnt):
+def fermat_spiral(t, isocontours, start_param):
     offset = float(t.get_extrude_width())
 
-    start_param = rs.CurveClosestPoint(isocontours[0], start_pnt)
     start = rs.EvaluateCurve(isocontours[0], start_param)
     split_circ = rs.AddCircle(start, offset)
     intersection = rs.CurveCurveIntersection(isocontours[0], split_circ)
@@ -643,11 +642,7 @@ def fill_curves_with_fermat_spiral(t, curves, bboxes=[], move_up=True, start_pnt
                 if len(n.sub_nodes) > 1:
                     num_pnts = get_num_points(n.sub_nodes[0], extrude_width)
                     if n.type == 1:
-                        pnts = rs.DivideCurve(n.sub_nodes[0], num_pnts)
-                        start_idx = 0
-                        if n.parent and n.parent.type == 2:
-                            start_idx = get_corner(t, n.sub_nodes[0], n.sub_nodes[-1], pnts)
-                        n.fermat_spiral = fermat_spiral(t, n.sub_nodes, pnts[start_idx])
+                        n.fermat_spiral = fermat_spiral(t, n.sub_nodes, rs.CurveClosestPoint(n.sub_nodes[0], t.get_position()))
                     elif n.type == 2:
                         n.fermat_spiral = rs.DivideCurve(n.sub_nodes[0], num_pnts)
                 elif len(n.sub_nodes) == 1:
