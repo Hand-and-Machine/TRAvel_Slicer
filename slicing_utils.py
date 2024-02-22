@@ -191,56 +191,69 @@ def spiral_contours(t, isocontours, start_index=0):
     return spiral, spiral_contour_indices
 
 
-def fermat_spiral(t, spiral, indices):
+def fermat_spiral(t, isocontours, start_pnt):
     offset = float(t.get_extrude_width())
 
-    # spiral path inward
-    in_spiral = []
-    start_index = 0
-    order = range(0, len(indices), 2)
-    for i in order:
-        connection = {"point": None, "distance": 1000000}
-        for j in range(indices[i]-1, 0, -1):
-            dist = 0.75*offset - rs.Distance(spiral[indices[i]], spiral[j])
-            if dist < -offset/5:
-                break
-            if abs(dist) < connection["distance"]:
-                connection["distance"] = dist
-                connection["point"] = j
+    start_param = rs.CurveClosestPoint(isocontours[0], start_pnt)
+    start = rs.EvaluateCurve(isocontours[0], start_param)
+    split_circ = rs.AddCircle(start, offset)
+    intersection = rs.CurveCurveIntersection(isocontours[0], split_circ)
 
-        in_spiral = in_spiral + range(start_index, connection["point"])
+    l = intersection[0][5]
+    l_pnt = intersection[0][1]
+    for i in range(len(intersection)):
+        int = intersection[i]
+        if int[0] == 1:
+            trim_crv = rs.TrimCurve(isocontours[0], [start_param, int[5]], delete_input=False)
+            crv_length = rs.CurveLength(trim_crv)
+            if crv_length<offset*2:
+                l = int[5]
+                l_pnt = int[1]
 
-        if i < len(indices) - 1:
-            start_index = indices[i+1]
-        else:
-            start_index = len(spiral) - 1
+    trims = [[l, start_param]]
+    joining_curves = []
+    for i in range(len(isocontours)-1):
+        split_circ = rs.AddCircle(l_pnt, offset)
+        intersection = rs.CurveCurveIntersection(isocontours[i], split_circ)
 
-    # if the number of isocontours is even, include a link
-    # from the end point of the spiral to the second to last index
-    out_spiral = []
-    start_index = indices[0]
-    order = range(1, len(indices), 2)
-    for i in order:
-        connection = {"point": None, "distance": 1000000}
-        for j in range(indices[i]-1, 0, -1):
-            dist = 0.75*offset - rs.Distance(spiral[indices[i]], spiral[j])
-            if dist < -offset/5:
-                break
-            if abs(dist) < connection["distance"]:
-                connection["distance"] = dist
-                connection["point"] = j
+        ll = intersection[0][5]
+        ll_pnt = intersection[0][1]
+        for int in intersection:
+            trim_crv = rs.TrimCurve(isocontours[i], [l, int[5]], delete_input=False)
+            crv_length = rs.CurveLength(trim_crv)
+            if crv_length<offset*2 and rs.Distance(l_pnt, int[1])>offset/2:
+                ll = int[5]
+                ll_pnt = int[1]
 
-        out_spiral = out_spiral + range(start_index, connection["point"])
+        trims[i] = [ll, start_param]
 
-        if i < len(indices) - 1:
-            start_index = indices[i+1]
-        else:
-            start_index = len(spiral) - 1
+        # find connecting points on next contour
+        up = rs.VectorSubtract(rs.CreatePoint(l_pnt.X, l_pnt.Y, l_pnt.Z+1.0), l_pnt)
+        l_prime = rs.CurveClosestPoint(isocontours[i+1], l_pnt+rs.VectorCrossProduct(up, rs.VectorSubtract(l_pnt, start)))
+        l_prime_pnt = rs.EvaluateCurve(isocontours[i+1], l_prime)
 
-    new_spiral = in_spiral + list(reversed(out_spiral))
-    new_spiral = [spiral[i] for i in new_spiral]
+        ll_prime = rs.CurveClosestPoint(isocontours[i+1], ll_pnt+rs.VectorSubtract(l_prime_pnt, l_pnt))
+        ll_prime_pnt = rs.EvaluateCurve(isocontours[i+1], ll_prime)
 
-    return new_spiral
+        joining_curves.append(rs.AddCurve([l_pnt, l_prime_pnt]))
+        joining_curves.append(rs.AddCurve([ll_pnt, ll_prime_pnt]))
+
+        start = l_prime_pnt
+        start_param = l_prime
+
+        l_pnt = ll_prime_pnt
+        l = ll_prime
+
+        trims.append([l, start_param])
+
+    for i in range(len(isocontours)):
+        if trims[i][0] < 0.0000001: trims[i][0] = 0.0
+        if trims[i][1] < 0.0000001: trims[i][1] = 0.0
+        isocontours[i] = rs.TrimCurve(isocontours[i], trims[i], delete_input=False)
+
+    spiraled_curve = rs.JoinCurves(isocontours+joining_curves)
+
+    return rs.DivideCurve(spiraled_curve, get_num_points(spiraled_curve, offset))
 
 
 def segment_tree(root):
@@ -486,24 +499,6 @@ def connect_curves(curves, offset):
     # have the largest surface area
     curves = sorted(curves, key=lambda x: get_size(x), reverse=True)
 
-    # find closest points between all curves
-    closest = {curve: None for curve in curves}
-    for c1 in range(len(curves)):
-        curve1 = curves[c1]
-        pnts1 = rs.DivideCurve(curve1, 100)
-
-        closest[curve1] = {}
-        for c2 in range(c1+1, len(curves)):
-            curve2 = curves[c2]
-            pnts2 = rs.DivideCurve(curve2, 100)
-
-            minimum = 100000
-            for pnt in pnts1:
-                idx, dist = closest_point(pnt, pnts2)
-                if dist < minimum:
-                    minimum = dist
-                    closest[curve1][curve2] = (pnt, pnts2[idx], dist)
-
     # construct a fully connected graph where each curve
     # represents a single node in the graph, and edges
     # are the minimum distance between each curve
@@ -513,15 +508,20 @@ def connect_curves(curves, offset):
         node.name = 'c' + str(c)
         graph.add_node(node)
 
-    for curve1 in closest:
-        for curve2 in closest[curve1]:
-            weight = closest[curve1][curve2][2]
+    # find closest points between all curves and add edges
+    closest = {curve: {} for curve in curves}
+    for c1 in range(len(curves)):
+        curve1 = curves[c1]
+        for c2 in range(c1+1, len(curves)):
+            curve2 = curves[c2]
+            id, pnt1, pnt2 = rs.CurveClosestObject(curve1, curve2)
+            weight = rs.Distance(pnt1, pnt2)
+            closest[curve1][curve2] = (pnt2, pnt1, weight)
+
             node1 = graph.get_node(curve1)
             node2 = graph.get_node(curve2)
             graph.add_edge(Graph_Edge(node1, node2, weight))
             graph.add_edge(Graph_Edge(node2, node1, weight))
-
-    #graph.print_graph_data()
 
     # trim graph by ordering edges from most weighted to least
     ordered_edges = get_edge_tuples(graph)
@@ -545,19 +545,13 @@ def connect_curves(curves, offset):
                     graph.add_edge(Graph_Edge(node2, node1, weight))
                     break
 
-    #graph.print_graph_data()
-    #min_edges = get_edge_tuples(graph)
-    #print([(tuple[0].name, tuple[1].name, tuple[2]) for tuple in min_edges])
-
     # split curves at shortest connection points to other curves
     new_curves = {}
     curve_ends = {}
-    max_weight = 0
     for node1 in graph.edges:
         split_points = []
         for node2 in graph.edges[node1]:
             split_point, weight = get_connect_point(closest, node1, node2)
-            if weight > max_weight: max_weight = weight
             split_points.append(split_point)
 
         split_curves, split_ends = split_curve_at(node1.data, split_points, tolerance=offset)
@@ -581,16 +575,20 @@ def connect_curves(curves, offset):
         pnt2_1 = ends2[0][0]
         pnt2_2 = ends2[1][0]
 
-        intersect = rs.PlanarClosedCurveContainment(rs.AddCurve([pnt1_1, pnt2_1]), rs.AddCurve([pnt1_2, pnt2_2]))
+        crv1 = rs.AddCurve([pnt1_1, pnt2_1])
+        crv2 = rs.AddCurve([pnt1_2, pnt2_2])
+        intersect = rs.PlanarCurveCollision(crv1, crv2)
 
-        if intersect == 0:
-            all_curves.append(rs.AddCurve([pnt1_1, pnt2_1]))
-            all_curves.append(rs.AddCurve([pnt1_2, pnt2_2]))
+        if not intersect:
+            all_curves.append(crv1)
+            all_curves.append(crv2)
         else:
             all_curves.append(rs.AddCurve([pnt1_1, pnt2_2]))
             all_curves.append(rs.AddCurve([pnt1_2, pnt2_1]))
 
-    return rs.JoinCurves(all_curves)
+    final_curve = rs.JoinCurves(all_curves)
+
+    return final_curve[0]
 
 
 def get_connect_point(closest, node1, node2):
@@ -645,14 +643,11 @@ def fill_curves_with_fermat_spiral(t, curves, bboxes=[], move_up=True, start_pnt
                 if len(n.sub_nodes) > 1:
                     num_pnts = get_num_points(n.sub_nodes[0], extrude_width)
                     if n.type == 1:
+                        pnts = rs.DivideCurve(n.sub_nodes[0], num_pnts)
                         start_idx = 0
                         if n.parent and n.parent.type == 2:
-                            start_idx = get_corner(t, n.sub_nodes[0], n.sub_nodes[-1], rs.DivideCurve(n.sub_nodes[0], num_pnts))
-                        else:
-                            if start_pnt:
-                                start_idx, d = closest_point(start_pnt, rs.DivideCurve(n.sub_nodes[0], num_pnts))
-                        spiral, indices = spiral_contours(t, n.sub_nodes, start_idx)
-                        n.fermat_spiral = fermat_spiral(t, spiral, indices)
+                            start_idx = get_corner(t, n.sub_nodes[0], n.sub_nodes[-1], pnts)
+                        n.fermat_spiral = fermat_spiral(t, n.sub_nodes, pnts[start_idx])
                     elif n.type == 2:
                         n.fermat_spiral = rs.DivideCurve(n.sub_nodes[0], num_pnts)
                 elif len(n.sub_nodes) == 1:
@@ -747,12 +742,14 @@ def fill_curves_with_spiral(t, curves, start_pnt=None, wall_first=False, initial
 
 
 def fill_curves_with_contours(t, curves, start_pnt=None, wall_mode=False, walls=3, initial_offset=0.5):
-    offset = float(t.get_extrude_width())
+    extrude_width = float(t.get_extrude_width())
 
     # connect curves if given more than one
+    connect_curve_time = time.time()
     curve = curves[0]
     if len(curves) > 1:
-        curve = connect_curves(curves, offset/8)
+        curve = connect_curves(curves, extrude_width/8)
+    print("Time to connect curves: "+str(round(time.time()-connect_curve_time, 3))+" seconds")
 
     # slice the shape
     # Generate isocontours
@@ -789,7 +786,9 @@ def slice_fermat_fill(t, shape, start_pnt=None, start=0, end=None, wall_mode=Fal
     if end is None: end = layers
 
     for l in range(start, min(layers, end)):
+        get_group_curves_start = time.time()
         curve_groups = get_curves(shape, l*t.get_layer_height())
+        print("Time to get and group curves: "+str(round(time.time()-get_group_curves_start, 3))+" seconds")
 
         for crvs in curve_groups:
             if start_pnt == None: start_pnt = t.get_position()

@@ -95,14 +95,15 @@ def get_num_points(curve, tolerance):
 
 
 def closest_point(point, points):
-    closest = {"point": None, "distance": 1000000}
+    idx = None
+    min_dist = 1000000
     for p in range(len(points)):
         dist = rs.Distance(point, points[p])
-        if dist < closest['distance']:
-            closest['distance'] = dist
-            closest['point'] = p
+        if dist < min_dist:
+            min_dist = dist
+            idx = p
     
-    return closest['point'], closest['distance']
+    return idx, min_dist
 
 
 def get_shortest_indices(start, end, points):
@@ -137,9 +138,7 @@ def get_curves(shape, z, retry=0, initial_curves=None):
         if z == 0:
             z = 0.1
         plane = get_plane(float(z))
-        s_time = time.time()
         initial_curves = rs.AddSrfContourCrvs(shape, plane)
-        print("Surface contour time: "+str(round(time.time()-s_time, 3))+" seconds")
 
     curves = repair_curves(initial_curves)
 
@@ -218,9 +217,11 @@ def split_curve_at(curve, points, tolerance=0):
 
     for point in points:
         for crv in curves:
-            if closest_point(point, rs.DivideCurve(crv, int(rs.CurveLength(curve)/(tolerance/4))))[1] < tolerance:
+            closest_pnt = rs.EvaluateCurve(crv, rs.CurveClosestPoint(crv, point))
+            if rs.Distance(closest_pnt, point) < tolerance:
                 curves.remove(crv)
-                split_curves, split_ends = split_curve(crv, point, tolerance)
+                split_curves, ends = split_curve(crv, point, tolerance)
+                split_ends = split_ends + ends
                 curves = curves + split_curves
                 break
     
@@ -228,57 +229,19 @@ def split_curve_at(curve, points, tolerance=0):
 
 
 def split_curve(curve, split_point, tolerance):
-    points = rs.DivideCurve(curve, get_num_points(curve, tolerance))
+    split_circ = rs.AddCircle(split_point, tolerance/2)
+    intersections = rs.CurveCurveIntersection(curve, split_circ)
 
-    # find closest point first
-    closest_idx, dist = closest_point(split_point, points)
+    split_curves = [curve]
+    if intersections!=None and len(intersections)>1:
+        split_curves = rs.TrimCurve(curve, [intersections[1][5], intersections[0][5]])
+        if type(split_curves) != list:
+            split_curves = [split_curves]
+    else:
+        print("Error: Unable to split curve at point.")
+    
+    return split_curves, [intersections[0][1], intersections[1][1]]
 
-    # collect all points on curve that are a distance of <= tolerance/2
-    # from the point closest to the split point, then verify that the
-    # length of the curve between those two indices
-    new_points = [None]*len(points)
-    remove_idxs = []
-    for p in range(len(points)):
-        new_points[p] = points[p]
-        if p == closest_idx:
-            remove_idxs.append(p)
-            new_points[p] = None
-        elif p!=closest_idx and rs.Distance(points[p], points[closest_idx]) < tolerance/2:
-            indices1 = []
-            indices2 = []
-            if p > closest_idx:
-                indices1 = range(p, len(points)) + range(0, closest_idx+1)
-                indices2 = range(closest_idx, p-1, -1)
-            elif p < closest_idx:
-                indices1 = range(p, closest_idx+1)
-                indices2 = range(p, -1, -1) + range(len(points)-1, closest_idx-1, -1)
-
-            points1 = [points[x] for x in indices1]
-            points2 = [points[x] for x in indices2]
-
-            curve_length_1 = 0
-            if len(points1) > 0: curve_length_1 = rs.CurveLength(rs.AddCurve(points1))
-            curve_length_2 = 0
-            if len(points2) > 0: curve_length_2 = rs.CurveLength(rs.AddCurve(points2))
-
-            if curve_length_1 < tolerance / 2 or curve_length_2 < tolerance / 2:
-                remove_idxs.append(p)
-                new_points[p] = None
-
-    sequences = [[]]
-    start_index = 0
-    if rs.IsCurveClosed(curve):
-        start_index = next((index for index, value in enumerate(new_points) if value != None and new_points[index-1] == None), -1)
-    if start_index !=- 1:
-        indices = range(start_index, len(new_points)) + range(0, start_index)
-        for i in indices:
-            next_i = (i+1)%len(new_points)
-            if new_points[i] != None:
-                sequences[-1].append(i)
-            elif new_points[next_i] != None and next_i != start_index:
-                sequences.append([])
-
-    return [rs.AddCurve([points[p] for p in sequence]) for sequence in sequences if len(sequence) > 1], [points[sequence[0]] for sequence in sequences if len(sequences)>0] + [points[sequence[-1]] for sequence in sequences if len(sequences)>0]
 
 class Grid:
     def __init__(self, points, width):
