@@ -585,9 +585,12 @@ def connect_curves(curves, offset):
             all_curves.append(rs.AddCurve([pnt1_1, pnt2_2]))
             all_curves.append(rs.AddCurve([pnt1_2, pnt2_1]))
 
-    final_curve = rs.JoinCurves(all_curves)
+    final_curve = rs.JoinCurves(all_curves)[0]
+    #if rs.ClosedCurveOrientation(final_curve)==-1:
+    #    success = rs.ReverseCurve(final_curve)
+    #    if not success: print("Error: Unable to reverse curve.")
 
-    return final_curve[0]
+    return final_curve
 
 
 def get_connect_point(closest, node1, node2):
@@ -647,12 +650,7 @@ def fill_curves_with_fermat_spiral(t, curves, bboxes=[], move_up=True, start_pnt
                         n.fermat_spiral = rs.DivideCurve(n.sub_nodes[0], num_pnts)
                 elif len(n.sub_nodes) == 1:
                     num_pnts = get_num_points(n.sub_nodes[0], extrude_width)
-                    points = rs.DivideCurve(n.sub_nodes[0], num_pnts)
-                    start_idx = 0
-                    if start_pnt:
-                        start_idx, d = closest_point(start_pnt, rs.DivideCurve(n.sub_nodes[0], num_pnts))
-                    indices = range(start_idx, len(points)) + range(0, start_idx)
-                    n.fermat_spiral = [points[i] for i in indices]
+                    n.fermat_spiral = rs.DivideCurve(n.sub_nodes[0], num_pnts)
                 else:
                     print("Error: node with no curves in it at all", n)
 

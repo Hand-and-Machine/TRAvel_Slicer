@@ -7,6 +7,8 @@ from geometry_utils import *
 def get_contours(t, curve, walls=3, wall_mode=False, initial_offset=0.5):
     all_contours_time = time.time()
 
+    print('')
+
     offset = float(t.get_extrude_width())
     if initial_offset > 0:
         first_contours = get_isocontour(curve, offset*initial_offset)
@@ -21,23 +23,16 @@ def get_contours(t, curve, walls=3, wall_mode=False, initial_offset=0.5):
             node = root.add_child(crv)
             node.is_wall = True
             isocontours = isocontours + [crv]
-            new_curves = get_isocontours(t, crv, node, wall_mode=wall_mode, walls=walls)
+            new_curves = get_isocontours(t, crv, node, walls=walls, wall_mode=wall_mode)
             if new_curves:
                 isocontours = isocontours + [crv for crv in new_curves if get_size(crv) > 1.5*offset]
-   # else:
-    #    node = root.add_child(curve)
-    #    isocontours = [curve]
-    
-    print('')
+
     print("Time to get "+str(len(isocontours))+" contours for layer: "+str(round(time.time()-all_contours_time, 3))+" seconds")
 
     return root, isocontours
 
 
 def get_isocontours(t, curve, parent, wall_mode=False, walls=3):
-    #if parent.depth > get_size(curve)*2.5/float(t.get_extrude_width()):
-    #    print("Recursion exceeded limit")
-    #    return []
     new_curves = get_isocontour(curve, float(t.get_extrude_width()))
     if not new_curves:
         return []
@@ -79,6 +74,8 @@ def get_isocontour(curve, offset):
     if len(points) % 2 == 0: short_pnts = len(points)/2
     else: short_pnts = int(math.floor(len(points)/2)) + 1
 
+    orientation = rs.ClosedCurveOrientation(curve)
+
     new_points = [None]*short_pnts
     discarded_points = [None]*short_pnts
     for i in range(0, len(points), 2):
@@ -90,7 +87,10 @@ def get_isocontour(curve, offset):
         # get "up" vector
         up = rs.VectorSubtract(rs.CreatePoint(points[i].X, points[i].Y, points[i].Z+1.0), points[i])
         # get vector orthogonal to tangent vector
-        ortho = rs.VectorCrossProduct(up, tangent)
+        if orientation == 1:
+            ortho = rs.VectorCrossProduct(up, tangent)
+        elif orientation == -1:
+            ortho = rs.VectorCrossProduct(tangent, up)
         # normalize and scale orthogonal vector
         ortho = rs.VectorScale(ortho, offset/rs.VectorLength(ortho))
         # compute new point
@@ -101,8 +101,8 @@ def get_isocontour(curve, offset):
         # check that distance from all neighboring points is >= offset
         neighbor_points = grid.get_neighbors(new_point)
 
-        for point in neighbor_points:
-            if not point == points[i] and rs.Distance(point, new_point) < offset:
+        for npoint in neighbor_points:
+            if not npoint == points[i] and rs.Distance(npoint, new_point) < offset:
                 include = False
                 break
         if include:
@@ -191,7 +191,6 @@ def get_isocontour(curve, offset):
 
             # Transform point lists into curves
             curves = [rs.AddCurve(c) for c in curves if len(c) > 5]
-            #curves = [crv for crv in curves if rs.PlanarClosedCurveContainment(crv, curve)==2]
             return curves
         else:
             return [rs.AddCurve(new_points + [new_points[0]])]

@@ -73,14 +73,14 @@ def best_vertical_path(t, shape, curves):
                             z = pnt.Z
                     bb = [
                         rs.CreatePoint(minX, minY, z),
-                        rs.CreatePoint(minX, maxY, z),
-                        rs.CreatePoint(maxX, maxY, z),
                         rs.CreatePoint(maxX, minY, z),
+                        rs.CreatePoint(maxX, maxY, z),
+                        rs.CreatePoint(minX, maxY, z),
                         rs.CreatePoint(minX, minY, z+t.get_layer_height()),
-                        rs.CreatePoint(minX, maxY, z+t.get_layer_height()),
+                        rs.CreatePoint(maxX, minY, z+t.get_layer_height()),
                         rs.CreatePoint(maxX, maxY, z+t.get_layer_height()),
-                        rs.CreatePoint(maxX, minY, z+t.get_layer_height())]
-                    box = rs.Box(bb)
+                        rs.CreatePoint(minX, maxY, z+t.get_layer_height())]
+                    box = rs.AddBox(bb)
                     node.box = box
                 except:
                     print("Unable to create box from bounding box: ", bb)
