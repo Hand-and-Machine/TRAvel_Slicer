@@ -204,13 +204,13 @@ def fermat_spiral(t, isocontours, start_pnt):
     l = intersection[0][5]
     l_pnt = intersection[0][1]
     for i in range(len(intersection)):
-        int = intersection[i]
-        if int[0] == 1:
-            trim_crv = rs.TrimCurve(isocontours[0], [start_param, int[5]], delete_input=False)
+        inter = intersection[i]
+        if inter[0] == 1:
+            trim_crv = rs.TrimCurve(isocontours[0], [start_param, inter[5]], delete_input=False)
             crv_length = rs.CurveLength(trim_crv)
             if crv_length<offset*2:
-                l = int[5]
-                l_pnt = int[1]
+                l = inter[5]
+                l_pnt = inter[1]
 
     trims = [[l, start_param]]
     joining_curves = []
