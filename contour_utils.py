@@ -96,6 +96,7 @@ def get_isocontour(curve, offset):
         # compute new point
         new_point = rs.VectorAdd(points[i], ortho)
 
+        # make sure point is actually inside curve
         include = True
         # check that distance from all neighboring points is >= offset
         neighbor_points = grid.get_neighbors(new_point)
