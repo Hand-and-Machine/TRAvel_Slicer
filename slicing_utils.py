@@ -191,7 +191,7 @@ def spiral_contours(t, isocontours, start_index=0):
     return spiral, spiral_contour_indices
 
 
-def fermat_spiral(t, isocontours, start_pnt):
+def fermat_spiral(t, node, isocontours, start_pnt):
     isocontours = [crv for crv in isocontours]
 
     offset = float(t.get_extrude_width())
@@ -211,6 +211,9 @@ def fermat_spiral(t, isocontours, start_pnt):
             if crv_length<offset*2:
                 l = inter[5]
                 l_pnt = inter[1]
+
+    node_connection_start = start
+    node_connection_end = l_pnt
 
     trims = [[l, start_param]]
     joining_curves = []
@@ -255,7 +258,11 @@ def fermat_spiral(t, isocontours, start_pnt):
 
     spiraled_curve = rs.JoinCurves(isocontours+joining_curves)
 
-    return rs.DivideCurve(spiraled_curve, get_num_points(spiraled_curve, offset))
+    node.connection[node.parent] = {}
+    node.connection[node.parent]["start"] = rs.CurveClosestPoint(spiraled_curve, node_connection_start)
+    node.connection[node.parent]["end"] = rs.CurveClosestPoint(spiraled_curve, node_connection_end)
+
+    return spiraled_curve
 
 
 def segment_tree(root):
@@ -296,10 +303,13 @@ def fill_region(region_node, node, idx):
 
 
 def connect_spiralled_nodes(t, root):
+    st3 = time.time()
     find_connections(t, root)
+    print("Time to find connections: "+str(round(time.time()-st3, 3))+" seconds")
     all_nodes = root.get_all_nodes([])
     all_nodes = {node.data: node for node in all_nodes}
 
+    st4 = time.time()
     path = connect_path(t, root, all_nodes, 0, [])
     spiral = []
     for p in range(len(path)):
@@ -307,6 +317,8 @@ def connect_spiralled_nodes(t, root):
         indices = get_marching_indices(node, path[p][1], path[p][2], path[p][3])
         if indices != None:
             spiral = spiral + [node.fermat_spiral[idx] for idx in indices]
+
+    print("Time to connect path: "+str(round(time.time()-st4, 3))+" seconds")
 
     return spiral
 
@@ -411,89 +423,75 @@ def connect_node_to_parent(t, node, parent):
 
     node_start, node_end = get_connection_indices(t, node)
 
-    points = node.fermat_spiral
-    start_pnt = points[node_start]
-    end_pnt = points[node_end]
+    node_curve = node.fermat_spiral
+    start_pnt = rs.EvaluateCurve(node_curve, node_start)
+    end_pnt = rs.EvaluateCurve(node_curve, node_end)
 
-    if node_start == node_end or rs.Distance(start_pnt, end_pnt) == 0:
-        print("Error: could not find suitable connection indices", node_start, node_end)
-        return
+    orientation = rs.ClosedCurveOrientation(node.sub_nodes[0])
 
-    direction = 90
     vec = rs.VectorSubtract(end_pnt, start_pnt)
-    vec = rs.VectorScale(rs.VectorUnitize(rs.VectorRotate(vec, direction, [0, 0, 1])), offset)
-    pnt1 = rs.VectorAdd(start_pnt, vec)
-    pnt2 = rs.VectorAdd(end_pnt, vec)
+    up = rs.VectorSubtract(rs.CreatePoint(start_pnt.X, start_pnt.Y, start_pnt.Z+1.0), start_pnt)
+    # get vector orthogonal to tangent vector
+    if orientation == -1:
+        ortho = rs.VectorCrossProduct(up, vec)
+    elif orientation == 1:
+        ortho = rs.VectorCrossProduct(vec, up)
+    # normalize and scale orthogonal vector
+    ortho = rs.VectorScale(ortho, offset/rs.VectorLength(ortho))
+    pnt1 = rs.VectorAdd(start_pnt, ortho)
+    pnt2 = rs.VectorAdd(end_pnt, ortho)
 
-    if (rs.PointInPlanarClosedCurve(pnt1, node.sub_nodes[0]) or rs.PointInPlanarClosedCurve(pnt2, node.sub_nodes[0])):
-        # collision occurred, switching directions
-        vec = rs.VectorSubtract(end_pnt, start_pnt)
-        vec = rs.VectorScale(rs.VectorUnitize(rs.VectorRotate(vec, -direction, [0, 0, 1])), offset)
-        pnt1 = rs.VectorAdd(start_pnt, vec)
-        pnt2 = rs.VectorAdd(end_pnt, vec)
+    if rs.PointInPlanarClosedCurve(pnt1, node.sub_nodes[0]) or rs.PointInPlanarClosedCurve(pnt2, node.sub_nodes[0]):
+        print('Error: had to reverse')
 
-    # search parent node points for points
-    # closest to computed intersection
-    closest = {"start": {"point": None, "distance": 1000000}, "end": {"point": None, "distance": 1000000}}
-    points = parent.fermat_spiral
-    for p in range(len(points)):
-        dist = rs.Distance(points[p], pnt1)
-        if dist < closest["start"]["distance"]:
-            closest["start"]["distance"] = dist
-            closest["start"]["point"] = p
+    parent_curve = parent.fermat_spiral
 
-    for p in range(len(points)):
-        dist1 = rs.Distance(points[p], pnt2)
-        dist2 = rs.Distance(points[p], pnt1) - offset*0.75
-        if (p != closest["start"]["point"]
-            and abs(dist2) <= offset*0.75
-            and dist1 < closest["end"]["distance"]):
-            closest["end"]["distance"] = dist1
-            closest["end"]["point"] = p
+    parent_start = rs.CurveClosestPoint(parent_curve, pnt1)
+    parent_end = rs.CurveClosestPoint(parent_curve, pnt2)
 
-    parent_start = closest["start"]["point"]
-    parent_end = closest["end"]["point"]
-
-    if parent_start == None or parent_end == None:
+    trim_crv = rs.TrimCurve(parent_curve, [parent_start, parent_end], delete_input=False)
+    if (trim_crv and rs.CurveLength(trim_crv)<2*offset):
+        parent.connection[node.data] = { "start": parent_start, "end": parent_end }
+        node.connection[parent.data] = { "start": node_start, "end": node_end }
+    else:
         print("Did not find suitable connection to outer contour", node_start, node_end, parent_start, parent_end)
-
-    parent.connection[node.data] = { parent_start: node_start, parent_end: node_end }
-    node.connection[parent.data] = { node_start: parent_start, node_end: parent_end }
 
 
 def get_connection_indices(t, node):
     offset = float(t.get_extrude_width())
 
-    start_index = 0
-    end_index = len(node.fermat_spiral) - 1
+    if node.connection.get(node.parent)!=None:
+        start_param = node.connection[node.parent]["start"]
+        end_param = node.connection[node.parent]["end"]
+    else:
+        node_curve = node.fermat_spiral
+        start_param = rs.CurveDomain(node_curve)[0]
+        start_point = rs.EvaluateCurve(node_curve, start_param)
+        split_circ = rs.AddCircle(start_point, offset)
+        intersection = rs.CurveCurveIntersection(node_curve, split_circ)
+        end_param = intersection[0][5]
+        for inter in intersection:
+            trim_crv = rs.TrimCurve(node_curve, [start_param, inter[5]], delete_input=False)
+            crv_length = rs.CurveLength(trim_crv)
+            if crv_length<offset*2 and rs.Distance(start_point, inter[1])>offset/2:
+                end_param = inter[5]
+                break
 
-    if node.type == 2 or len(node.sub_nodes) == 1:
-        points = node.fermat_spiral
-        # verify that we haven't already tried to connect to a node
-        # at those indices, otherwise move along curve to a new spot
-        available_indices = range(len(points))
-        connections = node.connection
-        if connections:
-            connection = [connections[n].keys() for n in connections]
-            for c in connection:
-                connect_indices = get_shortest_indices(c[0], c[1], points)
-                available_indices = [x for x in available_indices if not x in connect_indices]
+        interval = rs.CurveLength(node.sub_nodes[0])/offset
+        parameters = [n/interval for n in range(int(interval))]
 
-            # set start index
-            start_index = available_indices[0]
+        print(interval)
+        print(len(parameters), parameters)
 
-        start_pnt = points[start_index]
-        # find end index
-        closest = {"point": None, "distance": 1000000}
-        for i in available_indices:
-            dist = rs.Distance(points[i], start_pnt) - 0.75*offset
-            if abs(dist) < closest["distance"]:
-                closest["distance"] = abs(dist)
-                closest["point"] = i
-
-        end_index = closest["point"]
+        connections = [node.connection[n].values() for n in node.connection]
+        for connection in connections:
+            norm_start = rs.CurveNormalizedParameter(node.sub_nodes[0], connection[0])
+            norm_end = rs.CurveNormalizedParameter(node.sub_nodes[0], connection[1])
+            print(connection[0], norm_start)
+            print(connection[1], norm_end)
+            print(parameters[int(norm_start*len(parameters))])
     
-    return start_index, end_index
+    return start_param, end_param
 
 
 def connect_curves(curves, offset):
@@ -650,27 +648,34 @@ def fill_curves_with_fermat_spiral(t, curves, bboxes=[], move_up=True, start_pnt
             region_tree = segment_tree(child)
             all_nodes = region_tree.get_all_nodes([])
             for n in all_nodes:
+                count1 = count1+1
+                st_1 = time.time()
                 if len(n.sub_nodes) > 1:
-                    num_pnts = get_num_points(n.sub_nodes[0], extrude_width)
                     if n.type == 1:
                         if not n.parent:
                             start_point = rs.EvaluateCurve(n.sub_nodes[0], rs.CurveClosestPoint(n.sub_nodes[0], t.get_position()))
                         else:
                             start_point = get_corner(t, n.sub_nodes[0], n.sub_nodes[-1])
-                        n.fermat_spiral = fermat_spiral(t, n.sub_nodes, start_point)
+                        n.fermat_spiral = fermat_spiral(t, n, n.sub_nodes, start_point)
                     elif n.type == 2:
-                        n.fermat_spiral = rs.DivideCurve(n.sub_nodes[0], num_pnts)
+                        n.fermat_spiral = n.sub_nodes[0]
                 elif len(n.sub_nodes) == 1:
-                    num_pnts = get_num_points(n.sub_nodes[0], extrude_width)
-                    n.fermat_spiral = rs.DivideCurve(n.sub_nodes[0], num_pnts)
+                    n.fermat_spiral = n.sub_nodes[0]
                 else:
                     print("Error: node with no curves in it at all", n)
+
+                time1 = time1 + (time.time()-st_1)
+
+            count2 = count2+1
+            st_2 = time.time()
 
             if len(all_nodes) > 1:
                 inner_regions.append(connect_spiralled_nodes(t, region_tree))
             elif len(all_nodes) == 1:
                 inner_regions.append(all_nodes[0].fermat_spiral)
-        
+
+            time2 = time2 + (time.time()-st_2)
+
         outer_wall = node.data
         outer_points = rs.DivideCurve(outer_wall, int(rs.CurveLength(outer_wall)/t.get_resolution()))
         if outer_points == None:
@@ -691,6 +696,11 @@ def fill_curves_with_fermat_spiral(t, curves, bboxes=[], move_up=True, start_pnt
         if not wall_first:
             travel_paths = travel_paths + draw_points(t, outer_points, start_idx, bboxes=bboxes, move_up=move_up)
             final_spiral = final_spiral + outer_points
+
+    print("Average time to fermat spiral: "+str(round(time1/count1, 3)))
+    print("Total time to fermat spiral: "+str(round(time1, 3)))
+    print("Average time to connect spiraled nodes: "+str(round(time2/count2, 3)))
+    print("Total time to connect spiraled nodes: "+str(round(time2, 3)))
 
     return travel_paths, final_spiral
 
