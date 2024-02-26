@@ -220,12 +220,12 @@ def fermat_spiral(t, isocontours, start_pnt):
 
         ll = intersection[0][5]
         ll_pnt = intersection[0][1]
-        for int in intersection:
-            trim_crv = rs.TrimCurve(isocontours[i], [l, int[5]], delete_input=False)
+        for inter in intersection:
+            trim_crv = rs.TrimCurve(isocontours[i], [l, inter[5]], delete_input=False)
             crv_length = rs.CurveLength(trim_crv)
-            if crv_length<offset*2 and rs.Distance(l_pnt, int[1])>offset/2:
-                ll = int[5]
-                ll_pnt = int[1]
+            if crv_length<offset*2 and rs.Distance(l_pnt, inter[1])>offset/2:
+                ll = inter[5]
+                ll_pnt = inter[1]
 
         trims[i] = [ll, start_param]
 
