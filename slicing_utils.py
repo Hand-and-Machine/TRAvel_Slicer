@@ -86,7 +86,7 @@ def get_corner(t, outer_curve, inner_curve):
     outer_points = rs.DivideCurve(outer_curve, prec)
     center = get_area_center(inner_curve)
 
-    closest = {"point": 0, "distance": 1000000}
+    closest = {"point": rs.CurveStartPoint(outer_curve), "distance": 1000000}
 
     for p in range(len(outer_points)):
         pnt = outer_points[p]
@@ -676,10 +676,10 @@ def fill_curves_with_fermat_spiral(t, curves, bboxes=[], move_up=True, start_pnt
         if outer_points == None:
             outer_points = rs.DivideCurve(outer_wall, get_num_points(outer_wall, extrude_width))
 
-        start_idx = 0
-        if start_pnt: start_idx, d = closest_point(start_pnt, outer_points)
-
         if wall_first:
+            start_idx = 0
+            if start_pnt: start_idx, d = closest_point(start_pnt, outer_points)
+
             travel_paths = travel_paths + draw_points(t, outer_points, start_idx, bboxes=bboxes, move_up=move_up)
             final_spiral = final_spiral + outer_points
         for region in inner_regions:
@@ -689,6 +689,7 @@ def fill_curves_with_fermat_spiral(t, curves, bboxes=[], move_up=True, start_pnt
             travel_paths = travel_paths + draw_points(t, region_points, 0, bboxes=bboxes, move_up=move_up)
             final_spiral = final_spiral + region_points
         if not wall_first:
+            start_idx, d = closest_point(t.get_position(), outer_points)
             travel_paths = travel_paths + draw_points(t, outer_points, start_idx, bboxes=bboxes, move_up=move_up)
             final_spiral = final_spiral + outer_points
 
