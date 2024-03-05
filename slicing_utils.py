@@ -27,43 +27,55 @@ def draw_points(t, points, start_idx=0, bboxes=[], move_up=True):
     if len(points) > 1:
         t.pen_up()
         pos = t.get_position()
+        speed = t.get_speed()
         nozzle_width = t.get_nozzle_width()
+        extrude_width = t.get_extrude_width()
+
+        # retract if travel is greater than 2mm
+        short_dist = 2
+        retract_dist = 6.5
+        retract_min_dist_requirement = 2
+        if t.get_printer()=='ender':
+            t.set_speed(speed*3/2)
+            if rs.Distance(pos, points[start_idx]) > retract_min_dist_requirement:
+                t.extrude(-retract_dist)
+            elif rs.Distance(pos, points[start_idx]) > extrude_width*3:
+                t.extrude(-short_dist)
+
+        t.set_speed(speed*3)
         if move_up and rs.Distance(pos, points[start_idx]) > max(nozzle_width, t.get_layer_height()*2):
             z_lift = 2*float(t.get_layer_height())
             higher_z = max(pos.Z, points[start_idx].Z)+z_lift
             # go up layer_height*2, go to start position of next start + layer_height*2
-            #points1 = [rs.CreatePoint(pos.X, pos.Y, pos.Z+z_lift), rs.CreatePoint(points[start_idx].X, points[start_idx].Y, points[start_idx].Z+z_lift)]
+            points1 = [rs.CreatePoint(pos.X, pos.Y, pos.Z+z_lift), rs.CreatePoint(points[start_idx].X, points[start_idx].Y, points[start_idx].Z+z_lift)]
             # go up to higher z between current and next position, move parallel to x-y plane to next start point
-            points1 = [rs.CreatePoint(pos.X, pos.Y, higher_z), rs.CreatePoint(points[start_idx].X, points[start_idx].Y, higher_z)]
+            points2 = [rs.CreatePoint(pos.X, pos.Y, higher_z), rs.CreatePoint(points[start_idx].X, points[start_idx].Y, higher_z), points[start_idx]]
             # go up to maximum height, move parallel to x-y plane
-            points2 = [rs.CreatePoint(pos.X, pos.Y, max_z+z_lift), rs.CreatePoint(points[start_idx].X, points[start_idx].Y, max_z+z_lift)]
+            points3 = [rs.CreatePoint(pos.X, pos.Y, max_z+z_lift), rs.CreatePoint(points[start_idx].X, points[start_idx].Y, max_z+z_lift), points[start_idx]]
 
-            travel_points = points2
-
-            # create a surface that follows path up to the maximum z currently printed
-            # add wiggle room along bottom line in z-direction
-            surf1 = rs.AddSrfPt([
-                rs.CreatePoint(points1[0].X, points1[0].Y, points1[0].Z+nozzle_width/2),
-                rs.CreatePoint(points1[1].X, points1[1].Y, points1[1].Z+nozzle_width/2),
-                rs.CreatePoint(points1[1].X, points1[1].Y, max_z),
-                rs.CreatePoint(points1[0].X, points1[0].Y, max_z)])
-            intersect1 = []
-            for b in (range(len(bboxes)-2, -1, -1)):
-                int1 = rs.IntersectBreps(surf1, bboxes[b], nozzle_width/2)
-                if int1 != None:
-                    intersect1.append(int1)
-                    break
-            if len(intersect1) == 0:
+            if check_path_intersection(t, points1, bboxes):
                 travel_points = points1
-
+            elif check_path_intersection(t, points2, bboxes):
+                travel_points = points2
+            else:
+                travel_points = points3
+            
             for t_pnt in travel_points:
                 t.set_position(t_pnt.X, t_pnt.Y, t_pnt.Z)
 
             travel.append(rs.AddPolyline([pos]+travel_points))
         else:
+            t.set_position(points[start_idx].X, points[start_idx].Y, points[start_idx].Z)
             travel.append(rs.AddPolyline([pos, points[start_idx]]))
 
-        t.set_position(points[start_idx].X, points[start_idx].Y, points[start_idx].Z)
+        if t.get_printer()=='ender':
+            t.set_speed(speed*3/2)
+            if rs.Distance(pos, points[start_idx]) > retract_min_dist_requirement:
+                t.extrude(retract_dist)
+            elif rs.Distance(pos, points[start_idx]) > extrude_width*3:
+                t.extrude(short_dist)
+
+        t.set_speed(speed)
         t.pen_down()
 
         indices = range(start_idx, len(points)) + range(0, start_idx)
@@ -76,7 +88,28 @@ def draw_points(t, points, start_idx=0, bboxes=[], move_up=True):
 
 
 def check_path_intersection(t, path, boxes):
-    print()
+    nozzle_width = t.get_nozzle_width()
+    nozzle_height = t.get_nozzle_height()
+
+    # create a geometry that represents the nozzle along the path
+    direct = rs.CreatePoint(path[1].X, path[1].Y, 0.0) - rs.CreatePoint(path[0].X, path[0].Y, 0.0)
+
+    vecCW = rs.VectorScale(rs.VectorUnitize(rs.VectorRotate(direct, -90, [0,0,1])), nozzle_width/2)
+    vecCCW = rs.VectorScale(rs.VectorUnitize(rs.VectorRotate(direct, 90, [0,0,1])), nozzle_width/2)
+
+    vol_crv = rs.AddPolyline([path[0]+vecCCW, path[1]+vecCCW, path[1]+vecCW, path[0]+vecCW, path[0]+vecCCW])
+    path_vol = rs.ExtrudeCurveStraight(vol_crv, (0, 0, 0), (0, 0, nozzle_height*2))
+    rs.CapPlanarHoles(path_vol)
+
+    intersect1 = []
+    for b in (range(len(boxes)-2, -1, -1)):
+        int1 = rs.IntersectBreps(path_vol, boxes[b])
+        if int1 != None:
+            intersect1.append(int1)
+            break
+    if len(intersect1) == 0:
+        return True
+    return False
 
 
 def get_corner(t, outer_curve, inner_curve):
@@ -194,7 +227,7 @@ def spiral_contours(t, isocontours, start_index=0):
 def fermat_spiral(t, isocontours, start_pnt):
     isocontours = [crv for crv in isocontours]
 
-    offset = float(t.get_extrude_width())
+    offset = float(t.get_extrude_width())*0.8
 
     start_param = rs.CurveClosestPoint(isocontours[0], start_pnt)
     start = rs.EvaluateCurve(isocontours[0], start_param)
@@ -256,6 +289,27 @@ def fermat_spiral(t, isocontours, start_pnt):
     spiraled_curve = rs.JoinCurves(isocontours+joining_curves)
 
     return rs.DivideCurve(spiraled_curve, get_num_points(spiraled_curve, offset))
+
+
+def trim_curve(curve, offset, start_pnt):
+    start_param = rs.CurveClosestPoint(curve, start_pnt)
+    start = rs.EvaluateCurve(curve, start_param)
+    split_circ = rs.AddCircle(start, offset)
+    intersection = rs.CurveCurveIntersection(curve, split_circ)
+
+    if intersection==None:
+        return curve
+
+    param = intersection[0][5]
+    for i in range(len(intersection)):
+        inter = intersection[i]
+        if inter[0] == 1:
+            trim_crv = rs.TrimCurve(curve, [start_param, inter[5]], delete_input=False)
+            crv_length = rs.CurveLength(trim_crv)
+            if crv_length<offset*2:
+                param = inter[5]
+    
+    return rs.TrimCurve(curve, [param, start_param], delete_input=False)
 
 
 def segment_tree(root):
@@ -635,11 +689,6 @@ def fill_curves_with_fermat_spiral(t, curves, bboxes=[], move_up=True, start_pnt
     final_spiral = []
     travel_paths = []
 
-    time1 = 0
-    time2 = 0
-    count1 = 0
-    count2 = 0
-
     # Spiralling Regions
     # if generating the first isocontour resulted in multiple
     # regions, we have to handle them separately
@@ -654,7 +703,7 @@ def fill_curves_with_fermat_spiral(t, curves, bboxes=[], move_up=True, start_pnt
                     num_pnts = get_num_points(n.sub_nodes[0], extrude_width)
                     if n.type == 1:
                         if not n.parent:
-                            start_point = rs.EvaluateCurve(n.sub_nodes[0], rs.CurveClosestPoint(n.sub_nodes[0], t.get_position()))
+                            start_point = rs.EvaluateCurve(n.sub_nodes[0], rs.CurveClosestPoint(n.sub_nodes[0], start_pnt))
                         else:
                             start_point = get_corner(t, n.sub_nodes[0], n.sub_nodes[-1])
                         n.fermat_spiral = fermat_spiral(t, n.sub_nodes, start_point)
@@ -670,30 +719,35 @@ def fill_curves_with_fermat_spiral(t, curves, bboxes=[], move_up=True, start_pnt
                 inner_regions.append(connect_spiralled_nodes(t, region_tree))
             elif len(all_nodes) == 1:
                 inner_regions.append(all_nodes[0].fermat_spiral)
-        
-        outer_wall = node.data
-        outer_points = rs.DivideCurve(outer_wall, int(rs.CurveLength(outer_wall)/t.get_resolution()))
+
+        amt = 1.0
+        if t.get_printer() == 'ender': amt = 3.0
+
+        start_point = rs.EvaluateCurve(curve, rs.CurveClosestPoint(curve, start_pnt))
+        outer_wall = trim_curve(node.data, extrude_width*0.8, start_point)
+        outer_points = rs.DivideCurve(outer_wall, int(rs.CurveLength(outer_wall)/(amt*t.get_resolution())))
         if outer_points == None:
             outer_points = rs.DivideCurve(outer_wall, get_num_points(outer_wall, extrude_width))
 
+        #last_point = t.get_position()
         if wall_first:
             start_idx = 0
-            if start_pnt: start_idx, d = closest_point(start_pnt, outer_points)
-
+            #if start_pnt: start_idx, d = closest_point(start_pnt, outer_points)
             travel_paths = travel_paths + draw_points(t, outer_points, start_idx, bboxes=bboxes, move_up=move_up)
             final_spiral = final_spiral + outer_points
         for region in inner_regions:
             region_curve = rs.AddCurve(region)
-            region_points = rs.DivideCurve(region_curve, int(rs.CurveLength(region_curve)/t.get_resolution()))
+            region_points = rs.DivideCurve(region_curve, int(rs.CurveLength(region_curve)/(amt*t.get_resolution())))
             if region_points==None: region_points = region
             travel_paths = travel_paths + draw_points(t, region_points, 0, bboxes=bboxes, move_up=move_up)
             final_spiral = final_spiral + region_points
         if not wall_first:
-            start_idx, d = closest_point(t.get_position(), outer_points)
+            start_idx = 0
+            #start_idx, d = closest_point(rs.EvaluateCurve(outer_wall, rs.CurveClosestPoint(outer_wall, last_point)), outer_points)
             travel_paths = travel_paths + draw_points(t, outer_points, start_idx, bboxes=bboxes, move_up=move_up)
             final_spiral = final_spiral + outer_points
 
-    return travel_paths, final_spiral
+    return travel_paths, start_point
 
 
 def fill_curves_with_spiral(t, curves, start_pnt=None, wall_first=False, initial_offset=0.5):
@@ -855,7 +909,7 @@ def slice_vertical_and_fermat_fill(t, shape, all_curves, wall_mode=False, walls=
 
     fermat_time = time.time()
 
-    start_point = node_path[0].data.sub_nodes[0].start_point
+    start_point = t.get_position()
     boxes = []
     move_up = False
     for s in range(len(node_path)):
@@ -866,12 +920,14 @@ def slice_vertical_and_fermat_fill(t, shape, all_curves, wall_mode=False, walls=
 
         for node in node_path[s].data.sub_nodes:
             #print("Layer "+str(node.height)+", z: "+str(rs.CurveStartPoint(node.data[0][0]).Z))
-            start_point = t.get_position()
+            #start_point = t.get_position()
             for curves in node.data:
                 if not wall_mode or (wall_mode and fill_bottom and node.height<bottom_layers):
-                    travel_paths = travel_paths + fill_curves_with_fermat_spiral(t, curves, bboxes=boxes, move_up=move_up, start_pnt=start_point, initial_offset=initial_offset)[0]
+                    travel, start_point = fill_curves_with_fermat_spiral(t, curves, bboxes=boxes, move_up=move_up, start_pnt=start_point, initial_offset=initial_offset)
+                    travel_paths = travel_paths + travel
                 else:
-                    travel_paths = travel_paths + fill_curves_with_fermat_spiral(t, curves, bboxes=boxes, move_up=move_up, start_pnt=start_point, wall_mode=wall_mode, walls=walls, initial_offset=initial_offset)[0]
+                    travel, start_point = fill_curves_with_fermat_spiral(t, curves, bboxes=boxes, move_up=move_up, start_pnt=start_point, wall_mode=wall_mode, walls=walls, initial_offset=initial_offset)
+                    travel_paths = travel_paths + travel
             move_up = False
         move_up = True
 

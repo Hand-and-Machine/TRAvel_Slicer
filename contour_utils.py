@@ -5,9 +5,9 @@ import geometry_utils
 from geometry_utils import *
 
 def get_contours(t, curve, walls=3, wall_mode=False, initial_offset=0.5):
-    all_contours_time = time.time()
+    #all_contours_time = time.time()
 
-    print('')
+    #print('')
 
     offset = float(t.get_extrude_width())
     if initial_offset > 0:
@@ -27,7 +27,7 @@ def get_contours(t, curve, walls=3, wall_mode=False, initial_offset=0.5):
             if new_curves:
                 isocontours = isocontours + [crv for crv in new_curves if get_size(crv) > 1.5*offset]
 
-    print("Time to get "+str(len(isocontours))+" contours for layer: "+str(round(time.time()-all_contours_time, 3))+" seconds")
+    #print("Time to get "+str(len(isocontours))+" contours for layer: "+str(round(time.time()-all_contours_time, 3))+" seconds")
 
     return root, isocontours
 
