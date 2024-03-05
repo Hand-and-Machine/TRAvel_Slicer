@@ -27,24 +27,25 @@ def draw_points(t, points, start_idx=0, bboxes=[], move_up=True):
     if len(points) > 1:
         t.pen_up()
         pos = t.get_position()
-        speed = t.get_speed()
-        nozzle_width = t.get_nozzle_width()
-        extrude_width = t.get_extrude_width()
+        speed = float(t.get_speed())
+        layer_height = float(t.get_layer_height())
+        nozzle_width = float(t.get_nozzle_width())
+        extrude_width = float(t.get_extrude_width())
 
         # retract if travel is greater than 2mm
-        short_dist = 2
+        short_dist = 1
         retract_dist = 6.5
         retract_min_dist_requirement = 2
         if t.get_printer()=='ender':
             t.set_speed(speed*3/2)
             if rs.Distance(pos, points[start_idx]) > retract_min_dist_requirement:
                 t.extrude(-retract_dist)
-            elif rs.Distance(pos, points[start_idx]) > extrude_width*3:
+            elif rs.Distance(pos, points[start_idx]) > max(extrude_width*3, 2*layer_height):
                 t.extrude(-short_dist)
 
         t.set_speed(speed*3)
-        if move_up and rs.Distance(pos, points[start_idx]) > max(nozzle_width, t.get_layer_height()*2):
-            z_lift = 2*float(t.get_layer_height())
+        if move_up and rs.Distance(pos, points[start_idx]) > max(nozzle_width, 2*layer_height):
+            z_lift = 2*layer_height
             higher_z = max(pos.Z, points[start_idx].Z)+z_lift
             # go up layer_height*2, go to start position of next start + layer_height*2
             points1 = [rs.CreatePoint(pos.X, pos.Y, pos.Z+z_lift), rs.CreatePoint(points[start_idx].X, points[start_idx].Y, points[start_idx].Z+z_lift)]
@@ -72,7 +73,7 @@ def draw_points(t, points, start_idx=0, bboxes=[], move_up=True):
             t.set_speed(speed*3/2)
             if rs.Distance(pos, points[start_idx]) > retract_min_dist_requirement:
                 t.extrude(retract_dist)
-            elif rs.Distance(pos, points[start_idx]) > extrude_width*3:
+            elif rs.Distance(pos, points[start_idx]) > max(extrude_width*3, 2*layer_height):
                 t.extrude(short_dist)
 
         t.set_speed(speed)
