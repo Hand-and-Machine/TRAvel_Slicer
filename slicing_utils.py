@@ -35,9 +35,13 @@ def draw_points(t, points, start_idx=0, bboxes=[], move_up=True, spiral_seam=Fal
         short_dist = 1
         retract_dist = 6.5
         retract_min_dist_requirement = 2
+        if rs.Distance(pos, points[start_idx]) > retract_min_dist_requirement:
+            t.pen_up()
+
         if t.get_printer()=='ender':
             t.pen_up()
             t.set_speed(speed*3/2)
+
             if rs.Distance(pos, points[start_idx]) > retract_min_dist_requirement:
                 t.extrude(-retract_dist)
             elif rs.Distance(pos, points[start_idx]) > max(extrude_width*3, 2*layer_height):
@@ -77,16 +81,16 @@ def draw_points(t, points, start_idx=0, bboxes=[], move_up=True, spiral_seam=Fal
             elif rs.Distance(pos, points[start_idx]) > max(extrude_width*3, 2*layer_height):
                 t.extrude(short_dist)
 
-            t.set_speed(speed)
-            t.pen_down()
-
         box = rs.BoundingBox(points)
-        if get_longest_side(box) <= 5.0:
-            t.set_speed(float(speed/4))
-        elif get_longest_side(box) <= 10.0:
-            t.set_speed(float(speed/2))
-        elif get_longest_side(box) <= 15.0:
-            t.set_speed(float(speed*3/4))
+        side = get_longest_side(box)
+        if side<5.0:
+            t.set_speed(float(speed*0.25))
+        elif side<=20.0:
+            t.set_speed(float(speed*(0.05*side)))
+        else:
+            t.set_speed(speed)
+
+        t.pen_down()
 
         indices = range(start_idx, len(points)) + range(0, start_idx)
         for p in indices:
@@ -704,6 +708,8 @@ def fill_curves_with_fermat_spiral(t, curves, bboxes=[], move_up=True, start_pnt
     final_spiral = []
     travel_paths = []
 
+    start_point = start_pnt
+
     # Spiralling Regions
     # if generating the first isocontour resulted in multiple
     # regions, we have to handle them separately
@@ -725,7 +731,7 @@ def fill_curves_with_fermat_spiral(t, curves, bboxes=[], move_up=True, start_pnt
                         n.fermat_spiral = rs.DivideCurve(n.sub_nodes[0], num_pnts)
                 elif len(n.sub_nodes) == 1:
                     num_pnts = get_num_points(n.sub_nodes[0], extrude_width)
-                    n.fermat_spiral = rs.DivideCurve(n.sub_nodes[0], num_pnts)
+                    n.fermat_spiral = rs.DivideCurve(trim_curve(n.sub_nodes[0], extrude_width*0.25, start_point), num_pnts)
                 else:
                     print("Error: node with no curves in it at all", n)
 
@@ -738,31 +744,22 @@ def fill_curves_with_fermat_spiral(t, curves, bboxes=[], move_up=True, start_pnt
         if t.get_printer() == 'ender': amt = 3.0
 
         start_point = rs.EvaluateCurve(curve, rs.CurveClosestPoint(curve, start_pnt))
-        outer_wall = trim_curve(node.data, extrude_width*0.25, start_point)
+        outer_wall = trim_curve(node.data, extrude_width*0.5, start_point)
         outer_points = rs.DivideCurve(outer_wall, int(rs.CurveLength(outer_wall)/(amt*t.get_resolution())))
         if outer_points == None:
             outer_points = rs.DivideCurve(outer_wall, get_num_points(outer_wall, extrude_width))
 
-
-        last_point = t.get_position()
         if wall_first:
-            start_idx = 0
-            if spiral_seam:
-                start_idx, d = closest_point(rs.EvaluateCurve(outer_wall, rs.CurveClosestPoint(outer_wall, last_point)), outer_points)
-            travel_paths = travel_paths + draw_points(t, outer_points, start_idx, bboxes=bboxes, move_up=move_up, spiral_seam=spiral_seam)
+            travel_paths = travel_paths + draw_points(t, outer_points, 0, bboxes=bboxes, move_up=move_up, spiral_seam=spiral_seam)
             final_spiral = final_spiral + outer_points
         for region in inner_regions:
             region_curve = rs.AddCurve(region)
             region_points = rs.DivideCurve(region_curve, int(rs.CurveLength(region_curve)/(amt*t.get_resolution())))
             if region_points==None: region_points = region
-            travel_paths = travel_paths + draw_points(t, region_points, 0, bboxes=bboxes, move_up=move_up, spiral_seam=spiral_seam)
+            travel_paths = travel_paths + draw_points(t, region_points, 0, bboxes=bboxes, move_up=move_up, spiral_seam=False)
             final_spiral = final_spiral + region_points
-            last_point = t.get_position()
         if not wall_first:
-            start_idx = 0
-            if spiral_seam:
-                start_idx, d = closest_point(rs.EvaluateCurve(outer_wall, rs.CurveClosestPoint(outer_wall, last_point)), outer_points)
-            travel_paths = travel_paths + draw_points(t, outer_points, start_idx, bboxes=bboxes, move_up=move_up, spiral_seam=spiral_seam)
+            travel_paths = travel_paths + draw_points(t, outer_points, 0, bboxes=bboxes, move_up=move_up, spiral_seam=spiral_seam)
             final_spiral = final_spiral + outer_points
 
     return travel_paths, start_point
@@ -940,7 +937,6 @@ def slice_vertical_and_fermat_fill(t, shape, all_curves, wall_mode=False, walls=
             #print("Layer "+str(node.height)+", z: "+str(rs.CurveStartPoint(node.data[0][0]).Z))
             start_point = t.get_position()
             for curves in node.data:
-                #if not spiral_seam: start_point = t.get_position()
                 if not wall_mode or (wall_mode and fill_bottom and node.height<bottom_layers):
                     travel, start_point = fill_curves_with_fermat_spiral(t, curves, bboxes=boxes, move_up=move_up, start_pnt=start_point, initial_offset=initial_offset, spiral_seam=spiral_seam)
                     travel_paths = travel_paths + travel
