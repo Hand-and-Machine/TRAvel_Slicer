@@ -55,6 +55,11 @@ def get_shape_height(shape, xy_plane=True):
         return rs.Distance(bb[0], bb[4])
 
 
+def get_longest_side(bb):
+    size = max(rs.Distance(bb[0], bb[1]), rs.Distance(bb[1], bb[2]))
+    return size
+
+
 def xy_bbox_overlap(crv1, crv2, width=0):
     w = float(width)/2
     # do bounding boxes of shape overlap in XY plane
