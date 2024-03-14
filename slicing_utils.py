@@ -583,25 +583,23 @@ def connect_curves(curves, offset):
         node.name = 'c' + str(c)
         graph.add_node(node)
 
-    print('')
-    print("nodes")
-    for node in graph.nodes:
-        print(node, node.data, rs.ObjectType(node.data))
-
     # find closest points between all curves and add edges
-    closest = {curve: {} for curve in curves}
+    closest = {}
     for c1 in range(len(curves)):
         curve1 = curves[c1]
         for c2 in range(c1+1, len(curves)):
             curve2 = curves[c2]
             id, pnt1, pnt2 = rs.CurveClosestObject(curve1, curve2)
             weight = rs.Distance(pnt1, pnt2)
-            closest[curve1][curve2] = (pnt2, pnt1, weight)
 
             node1 = graph.get_node(curve1)
             node2 = graph.get_node(curve2)
             graph.add_edge(Graph_Edge(node1, node2, weight))
             graph.add_edge(Graph_Edge(node2, node1, weight))
+
+            if closest.get(node1) == None: closest[node1] = {}
+            if closest.get(node2) == None: closest[node2] = {}
+            closest[node1][node2] = (pnt2, pnt1, weight)
 
     # trim graph by ordering edges from most weighted to least
     ordered_edges = get_edge_tuples(graph)
@@ -626,40 +624,22 @@ def connect_curves(curves, offset):
                     break
 
     # split curves at shortest connection points to other curves
-    new_curves = {}
-    curve_ends = {}
-
-    print('')
-    print("nodes")
-    for node in graph.nodes:
-        print(node, node.data, rs.ObjectType(node.data))
-
-    for node1 in graph.edges:
-        split_points = []
-        for node2 in graph.edges[node1]:
-            split_point, weight = get_connect_point(closest, node1, node2)
-            split_points.append(split_point)
-
-        split_curves, split_ends = split_curve_at(node1.data, split_points, tolerance=offset)
-        new_curves[node1] = split_curves
-        curve_ends[node1] = split_ends
-
-    all_curves = [curve for n in new_curves for curve in new_curves[n]]
-
-    # join new split curves together with lines between ends
+    final_curve = None
     min_edges = get_edge_tuples(graph)
     for edge in min_edges:
         node1 = edge[0]
         node2 = edge[1]
-        connect_point_1, weight = get_connect_point(closest, node1, node2)
-        connect_point_2, weight = get_connect_point(closest, node2, node1)
+        split_point1 = get_connect_point(closest, node1, node2)[0]
+        split_curves1, split_ends1 = split_curve(node1.data, split_point1, tolerance=offset)
+        split_point2 = get_connect_point(closest, node2, node1)[0]
+        split_curves2, split_ends2 = split_curve(node2.data, split_point2, tolerance=offset)
 
-        ends1 = sorted([(end, rs.Distance(end, connect_point_1)) for end in curve_ends[node1]], key=lambda x: x[1])
-        pnt1_1 = ends1[0][0]
-        pnt1_2 = ends1[1][0]
-        ends2 = sorted([(end, rs.Distance(end, connect_point_2)) for end in curve_ends[node2]], key=lambda x: x[1])
-        pnt2_1 = ends2[0][0]
-        pnt2_2 = ends2[1][0]
+        pnt1_1 = split_ends1[0]
+        pnt1_2 = split_ends1[1]
+        pnt2_1 = split_ends2[0]
+        pnt2_2 = split_ends2[1]
+
+        all_curves = split_curves1 + split_curves2
 
         crv1 = rs.AddCurve([pnt1_1, pnt2_1])
         crv2 = rs.AddCurve([pnt1_2, pnt2_2])
@@ -671,25 +651,21 @@ def connect_curves(curves, offset):
         else:
             all_curves.append(rs.AddCurve([pnt1_1, pnt2_2]))
             all_curves.append(rs.AddCurve([pnt1_2, pnt2_1]))
-
-    print('')
-    print(all_curves)
-    print(all_curves[0])
-    final_curve = rs.JoinCurves(all_curves)[0]
-    #if rs.ClosedCurveOrientation(final_curve)==-1:
-    #    success = rs.ReverseCurve(final_curve)
-    #    if not success: print("Error: Unable to reverse curve.")
+        
+        final_curve = rs.JoinCurves(all_curves)[0]
+        node1.data = final_curve
+        node2.data = final_curve
 
     return final_curve
 
 
 def get_connect_point(closest, node1, node2):
     split_point = None
-    connection = closest[node1.data].get(node2.data)
+    connection = closest[node1].get(node2)
     if connection:
         split_point = connection[0]
     else:
-        connection = closest[node2.data].get(node1.data)
+        connection = closest[node2].get(node1)
         split_point = connection[1]
 
     weight = connection[2]

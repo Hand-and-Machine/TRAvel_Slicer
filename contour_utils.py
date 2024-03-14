@@ -143,7 +143,7 @@ def get_isocontour(curve, offset):
             start = [seq[0] for seq in sequences]
             end = [seq[-1] for seq in sequences]
 
-            inner_grid = Grid([new_points[s] for s in start], offset/2)
+            inner_grid = Grid([new_points[s] for s in start], offset*3.0)
 
             # get connections between sequences
             # prime connections dictionary with None index and large initial minimum distance
@@ -176,8 +176,10 @@ def get_isocontour(curve, offset):
                         idx2 = nodes.index(node2)
                         if idx != idx2 and connect in seq2:
                             nodes[idx] = nodes[idx] + nodes[idx2]
-                            nodes.pop(idx2)
+                            nodes.remove(node2)
                             connections_found = True
+                            break
+                    if connections_found: break
 
             # construct curves from groupings of indices
             curves = []
