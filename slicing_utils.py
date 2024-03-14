@@ -84,7 +84,7 @@ def draw_points(t, points, start_idx=0, bboxes=[], move_up=True, spiral_seam=Fal
         box = rs.BoundingBox(points)
         side = get_longest_side(box)
         if side<5.0:
-            t.set_speed(float(speed*0.25))
+            t.set_speed(float(speed*0.5))
         elif side<=20.0:
             t.set_speed(float(speed*(0.05*side)))
         else:
@@ -608,8 +608,8 @@ def connect_curves(curves, offset):
         node1 = edge[0]
         node2 = edge[1]
         weight = edge[2]
-        graph.edges[node1].pop(node2)
-        graph.edges[node2].pop(node1)
+        graph.remove_edge(node1, node2)
+        graph.remove_edge(node2, node1)
 
         for node in graph.nodes:
             if node != start_node:

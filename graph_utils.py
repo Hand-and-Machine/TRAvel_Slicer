@@ -48,6 +48,17 @@ class Graph:
             self.edge_keys[edge.start].append(edge.end)
             self.edge_keys[edge.start] = sorted(self.edge_keys[edge.start], key=lambda x:self.edges[edge.start][x], reverse=True)
 
+    def remove_edge(self, start, end):
+        if start not in self.nodes:
+            raise ValueError("Node not in graph " + str(start.data))
+        if end not in self.nodes:
+            raise ValueError("Node not in graph " + str(end.data))
+        if self.edge_keys.get(start)==None or end not in self.edge_keys[start]:
+            raise ValueError("Edge not in graph " + str(start.data) + ", " + str(end.data))
+        else:
+            self.edges[start].pop(end)
+            self.edge_keys[start].remove(end)
+
     def get_node(self, data):
         return self.node_keys.get(data)
         #for node in self.nodes:
