@@ -583,6 +583,11 @@ def connect_curves(curves, offset):
         node.name = 'c' + str(c)
         graph.add_node(node)
 
+    print('')
+    print("nodes")
+    for node in graph.nodes:
+        print(node, node.data, rs.ObjectType(node.data))
+
     # find closest points between all curves and add edges
     closest = {curve: {} for curve in curves}
     for c1 in range(len(curves)):
@@ -623,6 +628,12 @@ def connect_curves(curves, offset):
     # split curves at shortest connection points to other curves
     new_curves = {}
     curve_ends = {}
+
+    print('')
+    print("nodes")
+    for node in graph.nodes:
+        print(node, node.data, rs.ObjectType(node.data))
+
     for node1 in graph.edges:
         split_points = []
         for node2 in graph.edges[node1]:
@@ -661,6 +672,9 @@ def connect_curves(curves, offset):
             all_curves.append(rs.AddCurve([pnt1_1, pnt2_2]))
             all_curves.append(rs.AddCurve([pnt1_2, pnt2_1]))
 
+    print('')
+    print(all_curves)
+    print(all_curves[0])
     final_curve = rs.JoinCurves(all_curves)[0]
     #if rs.ClosedCurveOrientation(final_curve)==-1:
     #    success = rs.ReverseCurve(final_curve)

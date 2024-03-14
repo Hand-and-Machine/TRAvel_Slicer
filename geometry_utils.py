@@ -197,16 +197,18 @@ def get_curve_groupings(curves):
         if iteration > 30: break
         iteration = iteration+1
         next_group = []
+        inner_copy = [c for c in inner_curves]
         for c in outer_curves:
-            for c2 in inner_curves:
+            for c2 in inner_copy:
                 if inside[c2][c] and all([inside[c2][c3] == inside[c][c3] for c3 in inside[c2] if c3 != c]):
                     curve_groupings[c].append(c2)
                     next_group.append(c2)
                     inner_curves.remove(c2)
 
         outer_curves = []
+        inner_copy = [c for c in inner_curves]
         for c in next_group:
-            for c2 in inner_curves:
+            for c2 in inner_copy:
                 if inside[c2][c] and all([inside[c2][c3] == inside[c][c3] for c3 in inside[c2] if c3 != c]):
                     outer_curves.append(c2)
                     curve_groupings[c2] = []
