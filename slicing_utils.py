@@ -36,7 +36,7 @@ def draw_points(t, points, start_idx=0, bboxes=[], move_up=True, spiral_seam=Fal
         retract_dist = 6.5
         retract_min_dist_requirement = 2
         if rs.Distance(pos, points[start_idx]) > retract_min_dist_requirement:
-            t.pen_up()
+            if t.get_printer()=='ender': t.pen_up()
 
         if t.get_printer()=='ender':
             t.pen_up()
@@ -81,14 +81,14 @@ def draw_points(t, points, start_idx=0, bboxes=[], move_up=True, spiral_seam=Fal
             elif rs.Distance(pos, points[start_idx]) > max(extrude_width*3, 2*layer_height):
                 t.extrude(short_dist)
 
-        box = rs.BoundingBox(points)
-        side = get_longest_side(box)
-        if side<5.0:
-            t.set_speed(float(speed*0.5))
-        elif side<=20.0:
-            t.set_speed(float(speed*(0.05*side)))
-        else:
-            t.set_speed(speed)
+            box = rs.BoundingBox(points)
+            side = get_longest_side(box)
+            if side<5.0:
+                t.set_speed(float(speed*0.5))
+            elif side<=20.0:
+                t.set_speed(float(speed*(0.05*side)))
+            else:
+                t.set_speed(speed)
 
         t.pen_down()
 

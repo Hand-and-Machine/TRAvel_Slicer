@@ -176,11 +176,15 @@ def build_vertical_tree(t, shape, all_curves):
     root = Node('root')
     root.name = 'root'
 
+    time1 = 0
+
     center_point = rs.CreatePoint(0, 0, 0)
     previous_nodes = [root]
     for l in range(len(all_curves)):
+        st_1 = time.time()
         initial_curves = all_curves[l]
         curve_groups = get_curves(shape, rs.CurveStartPoint(initial_curves[0]).Z, initial_curves=initial_curves)
+        time1 = time1 + time.time()-st_1
 
         outer_curves = []
         for crvs in curve_groups:
@@ -195,7 +199,6 @@ def build_vertical_tree(t, shape, all_curves):
         idx_groups = {c:[c] for c in range(len(outer_curves))}
         for c1 in range(len(outer_curves)):
             for c2 in range(c1+1, len(outer_curves)):
-                #if rs.PlanarClosedCurveContainment(outer_curves[c1], outer_curves[c2], tolerance=nozzle_width/2) > 0:
                 if dynamic_curve_overlap_check(curve_groups[c1], curve_groups[c2], nozzle_width):
                     idx_groups[c1].append(c2)
 
@@ -245,6 +248,8 @@ def build_vertical_tree(t, shape, all_curves):
 
         previous_nodes = new_nodes
 
+    print('')
+    print("Time to get curves: "+str(round(time1, 3))+" seconds")
     print('')
     print("Initial treeing time: "+str(round(time.time() - start_time, 3))+" seconds")
     print("Initial height tree size: "+str(len(root.get_all_nodes([]))))

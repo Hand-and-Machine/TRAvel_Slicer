@@ -65,7 +65,7 @@ def get_isocontour(curve, offset):
         return None
 
     points = rs.DivideCurve(curve, num_pnts)
-    grid = Grid(points, offset/2)
+    grid = Grid(points, offset)
 
     # determine each new p' at distance offset away from p
     new_points_exist = False
@@ -78,7 +78,7 @@ def get_isocontour(curve, offset):
 
     new_points = [None]*short_pnts
     discarded_points = [None]*short_pnts
-    for i in range(0, len(points), 2):
+    for i in range(0, len(points)):
         prev_i = (i-1) % len(points)
         next_i = (i+1) % len(points)
 
@@ -133,8 +133,8 @@ def get_isocontour(curve, offset):
             for seq in init_sequences:
                 if len(seq) > 1 and rs.PlanarClosedCurveContainment(rs.AddCurve([new_points[idx] for idx in seq+seq[-2:0:-1]+[seq[0]]]), curve)==2:
                     sequences.append(seq)
-                #elif len(seq) == 1 and rs.PointInPlanarClosedCurve(new_points[seq[0]], curve)==1:
-                    #sequences.append(seq)
+                elif len(seq) == 1 and rs.PointInPlanarClosedCurve(new_points[seq[0]], curve)==1:
+                    sequences.append(seq)
 
             if len(sequences) == 0:
                 return None
@@ -143,14 +143,16 @@ def get_isocontour(curve, offset):
             start = [seq[0] for seq in sequences]
             end = [seq[-1] for seq in sequences]
 
-            inner_grid = Grid([new_points[s] for s in start], offset*3.0)
-
+            starts_grid = Grid([new_points[s] for s in start], offset)
+            all_starts = [new_points[k] for k in start]
             # get connections between sequences
             # prime connections dictionary with None index and large initial minimum distance
             connections = {j: (None, 100000) for j in end}
             # find shortest connection provided the line does not intersect the outer curve
             for j in end:
-                neighbors = inner_grid.get_neighbors(new_points[j])
+                neighbors = starts_grid.get_neighbors(new_points[j])
+                if len(neighbors)<=1: neighbors = starts_grid.get_neighbors(new_points[j], 4)
+                if len(neighbors)<=1: neighbors = all_starts
                 for n_pnt in neighbors:
                     if n_pnt != new_points[j]:
                         dist = rs.Distance(new_points[j], n_pnt)

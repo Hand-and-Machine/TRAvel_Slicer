@@ -140,6 +140,7 @@ def get_shortest_indices(start, end, points):
 
 def get_curves(shape, z, retry=0, initial_curves=None):
     if initial_curves==None:
+        print("Slice shape at height "+str(z))
         if z == 0:
             z = 0.1
         plane = get_plane(float(z))
@@ -187,7 +188,21 @@ def get_curve_groupings(curves):
     # find curve groupings from intersection of shape with plane
     # curves can represent the inside of a surface or potentially
     # a nested curve within another set of curves defining a surface
-    inside = {c:{c2:rs.PlanarClosedCurveContainment(curves[c], curves[c2])==2 for c2 in range(len(curves)) if c2 != c} for c in range(len(curves))}
+    inside = {c:{} for c in range(len(curves))}
+    for c in range(len(curves)):
+        for c2 in range(c+1, len(curves)):
+            if xy_bbox_overlap(curves[c], curves[c2]):
+                containment = rs.PlanarClosedCurveContainment(curves[c], curves[c2])
+                if containment == 2:
+                    inside[c][c2] = True
+                    inside[c2][c] = False
+                else:
+                    inside[c][c2] = False
+                    inside[c2][c] = True
+            else:
+                inside[c][c2] = False
+                inside[c2][c] = False
+
     outer_curves = [c for c in range(len(curves)) if not any([inside[c][k] for k in inside[c]])]
     inner_curves = [c for c in range(len(curves)) if c not in outer_curves]
 
@@ -268,16 +283,16 @@ class Grid:
 
             self.grid[x_idx][y_idx].append(point)
 
-    def get_neighbors(self, point):
+    def get_neighbors(self, point, neighborhood=1):
         x_idx = max(min(int((point.X - self.minX) // self.width), self.max_x_idx), 0)
         y_idx = max(min(int((point.Y - self.minY) // self.width), self.max_y_idx), 0)
 
         # start with center
         points = self.grid[x_idx][y_idx]
 
-        # retrieve eight neighbors
-        for x in range(max(0, x_idx-1), min(self.max_x_idx+1, x_idx+2)):
-            for y in range(max(0, y_idx-1), min(self.max_y_idx+1, y_idx+2)):
+        # retrieve neighbors
+        for x in range(max(0, x_idx-neighborhood), min(self.max_x_idx, x_idx+neighborhood+1)):
+            for y in range(max(0, y_idx-neighborhood), min(self.max_y_idx, y_idx+neighborhood)+1):
                 if not (x==x_idx and y==y_idx):
                     points = points + self.grid[x][y]
         
