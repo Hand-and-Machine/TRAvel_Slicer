@@ -95,7 +95,7 @@ def get_surface(curve, z):
 def get_num_points(curve, tolerance):
     # we justify a coefficient of 1/2, the points
     # overlap by half the extrusion width
-    k = 0.5
+    k = 0.4
     return max(int(rs.CurveLength(curve)/(float(tolerance)*k)), 4)
 
 

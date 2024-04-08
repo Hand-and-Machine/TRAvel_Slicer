@@ -256,7 +256,7 @@ def build_vertical_tree(t, shape, all_curves):
 
     return root
 
-def segment_tree_by_height(t, tree, total_height):
+def segment_tree_by_height(t, tree, total_height, offset=0.0):
     limit = nozzle_height / t.get_layer_height()
     super_root = Node('root')
     super_root.name = 'root'
@@ -266,17 +266,17 @@ def segment_tree_by_height(t, tree, total_height):
 
     start_time = time.time()
     for child in tree.children:
-        group_by_height(child, super_root, limit, idx=idx)
+        group_by_height(child, super_root, limit, offset, idx=idx)
         idx = idx + 1
     print("Grouping tree by nozzle height: "+str(round(time.time() - start_time, 3))+" seconds")
 
     s_t = time.time()
-    divide_by_overlap(super_root, total_height)
+    divide_by_overlap(super_root, total_height, offset)
     print("Dividing super tree by overlap: "+str(round(time.time() - s_t, 3))+" seconds")
     return super_root
 
 
-def group_by_height(node, super_node, height, idx=0):
+def group_by_height(node, super_node, height, offset, idx=0):
     s_node = super_node
     if node.height // height == super_node.height:
         super_node.add_sub_node(node)
@@ -307,7 +307,7 @@ def group_by_height(node, super_node, height, idx=0):
         idx = idx + 1
 
 
-def divide_by_overlap(super_root, total_height):
+def divide_by_overlap(super_root, total_height, offset):
     height = int(math.floor(total_height / nozzle_height)) + 1
     nodes = super_root.get_all_nodes([])
     for h in range(height):
@@ -499,12 +499,13 @@ def curve_overlap_check(curves1, curves2, width):
             inners = inners1
 
         for inner in inners:
-            intersection = rs.PlanarClosedCurveContainment(outer, inner, tolerance=width/2)
-            if intersection == 1 or intersection==3:
-                return True
-            elif intersection == 2:
-                # outer curve is inside an inner curve
-                return False
+            if xy_bbox_overlap(outer, inner):
+                intersection = rs.PlanarClosedCurveContainment(outer, inner, tolerance=width/2)
+                if intersection == 1 or intersection==3:
+                    return True
+                elif intersection == 2:
+                    # outer curve is inside an inner curve
+                    return False
         return True
     return False
 

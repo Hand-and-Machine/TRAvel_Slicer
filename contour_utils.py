@@ -5,13 +5,13 @@ import geometry_utils
 from geometry_utils import *
 
 def get_contours(t, curve, walls=3, wall_mode=False, initial_offset=0.5):
-    #all_contours_time = time.time()
+    all_contours_time = time.time()
 
     #print('')
 
     offset = float(t.get_extrude_width())
     if initial_offset > 0:
-        first_contours = get_isocontour(curve, offset*initial_offset)
+        first_contours = get_isocontour(curve, offset*initial_offset, curve)
     else:
         first_contours = [curve]
 
@@ -27,13 +27,15 @@ def get_contours(t, curve, walls=3, wall_mode=False, initial_offset=0.5):
             if new_curves:
                 isocontours = isocontours + [crv for crv in new_curves if get_size(crv) > 1.5*offset]
 
+    contour_time = time.time()-all_contours_time
+
     #print("Time to get "+str(len(isocontours))+" contours for layer: "+str(round(time.time()-all_contours_time, 3))+" seconds")
 
-    return root, isocontours
+    return root, isocontours, contour_time
 
 
 def get_isocontours(t, curve, parent, wall_mode=False, walls=3):
-    new_curves = get_isocontour(curve, float(t.get_extrude_width()))
+    new_curves = get_isocontour(curve, float(t.get_extrude_width()), curve)
     if not new_curves:
         return []
     else:
@@ -48,7 +50,7 @@ def get_isocontours(t, curve, parent, wall_mode=False, walls=3):
         return curves
 
 
-def get_isocontour(curve, offset):
+def get_isocontour(curve, offset, outer_curve):
     if not curve:
         print("Error: get_isocontours not called with a curve", curve)
         return None
@@ -65,19 +67,19 @@ def get_isocontour(curve, offset):
         return None
 
     points = rs.DivideCurve(curve, num_pnts)
-    grid = Grid(points, offset)
+    grid = Grid(points, offset*1.5)
 
     # determine each new p' at distance offset away from p
     new_points_exist = False
     discarded_points_exist = False
 
-    if len(points) % 2 == 0: short_pnts = len(points)/2
-    else: short_pnts = int(math.floor(len(points)/2)) + 1
+    #if len(points) % 2 == 0: short_pnts = len(points)/2
+    #else: short_pnts = int(math.floor(len(points)/2)) + 1
 
     orientation = rs.ClosedCurveOrientation(curve)
 
-    new_points = [None]*short_pnts
-    discarded_points = [None]*short_pnts
+    new_points = [None]*len(points)
+    discarded_points = [None]*len(points)
     for i in range(0, len(points)):
         prev_i = (i-1) % len(points)
         next_i = (i+1) % len(points)
@@ -106,10 +108,10 @@ def get_isocontour(curve, offset):
                 include = False
                 break
         if include:
-            new_points[i/2] = new_point
+            new_points[i] = new_point
             new_points_exist = True
         else:
-            discarded_points[i/2] = new_point
+            discarded_points[i] = new_point
             discarded_points_exist = True
 
     # if there are new points
@@ -143,7 +145,7 @@ def get_isocontour(curve, offset):
             start = [seq[0] for seq in sequences]
             end = [seq[-1] for seq in sequences]
 
-            starts_grid = Grid([new_points[s] for s in start], offset)
+            starts_grid = Grid([new_points[s] for s in start], offset*1.5)
             all_starts = [new_points[k] for k in start]
             # get connections between sequences
             # prime connections dictionary with None index and large initial minimum distance
@@ -151,8 +153,8 @@ def get_isocontour(curve, offset):
             # find shortest connection provided the line does not intersect the outer curve
             for j in end:
                 neighbors = starts_grid.get_neighbors(new_points[j])
-                if len(neighbors)<=1: neighbors = starts_grid.get_neighbors(new_points[j], 4)
-                if len(neighbors)<=1: neighbors = all_starts
+                if len(neighbors)<=3: neighbors = starts_grid.get_neighbors(new_points[j], 3)
+                if len(neighbors)<=3: neighbors = all_starts
                 for n_pnt in neighbors:
                     if n_pnt != new_points[j]:
                         dist = rs.Distance(new_points[j], n_pnt)
@@ -195,8 +197,11 @@ def get_isocontour(curve, offset):
 
             # Transform point lists into curves
             curves = [rs.AddCurve(c) for c in curves if len(c) > 5]
+            curves = [crv for crv in curves if rs.PlanarClosedCurveContainment(crv, outer_curve)==2]
             return curves
         else:
-            return [rs.AddCurve(new_points + [new_points[0]])]
+            curves = [rs.AddCurve(new_points + [new_points[0]])]
+            curves = [crv for crv in curves if rs.PlanarClosedCurveContainment(crv, outer_curve)==2]
+            return curves
     else:
         return None
