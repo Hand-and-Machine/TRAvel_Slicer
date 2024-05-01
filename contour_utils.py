@@ -1,15 +1,16 @@
 import math
 import tree_utils
 from tree_utils import *
+import slicing_utils
+from slicing_utils import *
 import geometry_utils
 from geometry_utils import *
 
-def get_contours(t, curve, walls=3, wall_mode=False, initial_offset=0.5):
+def get_contours(curve, offset, walls=3, wall_mode=False, initial_offset=0.5):
     all_contours_time = time.time()
 
     #print('')
 
-    offset = float(t.get_extrude_width())
     if initial_offset > 0:
         first_contours = get_isocontour(curve, offset*initial_offset, curve)
     else:
@@ -23,9 +24,9 @@ def get_contours(t, curve, walls=3, wall_mode=False, initial_offset=0.5):
             node = root.add_child(crv)
             node.is_wall = True
             isocontours = isocontours + [crv]
-            new_curves = get_isocontours(t, crv, node, walls=walls, wall_mode=wall_mode)
+            new_curves = get_isocontours(crv, offset, node, walls=walls, wall_mode=wall_mode)
             if new_curves:
-                isocontours = isocontours + [crv for crv in new_curves if get_size(crv) > 1.5*offset]
+                isocontours = isocontours + new_curves #[crv for crv in new_curves if get_size(crv) > 1.5*offset]
 
     contour_time = time.time()-all_contours_time
 
@@ -34,8 +35,8 @@ def get_contours(t, curve, walls=3, wall_mode=False, initial_offset=0.5):
     return root, isocontours, contour_time
 
 
-def get_isocontours(t, curve, parent, wall_mode=False, walls=3):
-    new_curves = get_isocontour(curve, float(t.get_extrude_width()), curve)
+def get_isocontours(curve, offset, parent, wall_mode=False, walls=3):
+    new_curves = get_isocontour(curve, offset, curve)
     if not new_curves:
         return []
     else:
@@ -44,7 +45,7 @@ def get_isocontours(t, curve, parent, wall_mode=False, walls=3):
         if (not wall_mode or (wall_mode and new_depth < walls)):
             for c in new_curves:
                 node = parent.add_child(c)
-                new_new_curves = get_isocontours(t, c, node, wall_mode=wall_mode, walls=walls)
+                new_new_curves = get_isocontours(c, offset, node, wall_mode=wall_mode, walls=walls)
                 for nc in new_new_curves:
                     curves.append(nc)
         return curves
@@ -61,12 +62,16 @@ def get_isocontour(curve, offset, outer_curve):
             print("Error: get_isocontours called with an unclosable curve: ", curve)
             return None
 
-    num_pnts = get_num_points(curve, offset)
+    #num_pnts = get_num_points(curve, offset)
 
-    if num_pnts <= 5:
-        return None
+    #if num_pnts <= 5:
+    #    return None
 
-    points = rs.DivideCurve(curve, num_pnts)
+    #points = rs.DivideCurveEquidistant(curve, num_pnts) + get_corners(curve)
+    dist = get_segment_distance(offset)
+    points = [pnt for pnt in rs.DivideCurveEquidistant(curve, dist, True)] + get_corners(curve)
+    points = sorted(points, key=lambda x: rs.CurveClosestPoint(curve, x))
+
     grid = Grid(points, offset*1.5)
 
     # determine each new p' at distance offset away from p
@@ -80,14 +85,16 @@ def get_isocontour(curve, offset, outer_curve):
 
     new_points = [None]*len(points)
     discarded_points = [None]*len(points)
-    for i in range(0, len(points)):
+
+    # get "up" vector
+    up = rs.VectorSubtract(rs.CreatePoint(points[0].X, points[0].Y, points[0].Z+1.0), points[0])
+    for i in range(len(points)):
+        # get tangent vector
+        #tangent = rs.CurveTangent(curve, rs.CurveClosestPoint(curve, points[i]))
+        #if tangent==None:
         prev_i = (i-1) % len(points)
         next_i = (i+1) % len(points)
-
-        # get tangent vector
         tangent = rs.VectorSubtract(points[next_i], points[prev_i])
-        # get "up" vector
-        up = rs.VectorSubtract(rs.CreatePoint(points[i].X, points[i].Y, points[i].Z+1.0), points[i])
         # get vector orthogonal to tangent vector
         if orientation == 1:
             ortho = rs.VectorCrossProduct(up, tangent)
@@ -196,7 +203,7 @@ def get_isocontour(curve, offset, outer_curve):
             curves = [c+[c[0]] for c in curves]
 
             # Transform point lists into curves
-            curves = [rs.AddCurve(c) for c in curves if len(c) > 5]
+            curves = [rs.AddCurve(c) for c in curves if len(c) > 2]
             curves = [crv for crv in curves if rs.PlanarClosedCurveContainment(crv, outer_curve)==2]
             return curves
         else:

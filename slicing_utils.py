@@ -129,9 +129,7 @@ def check_path_intersection(t, path, boxes):
     return False
 
 
-def get_corner(t, outer_curve, inner_curve):
-    offset = float(t.get_extrude_width())
-
+def get_corner(outer_curve, inner_curve, offset):
     prec = 100
     outer_points = rs.DivideCurve(outer_curve, prec)
     center = get_area_center(inner_curve)
@@ -241,10 +239,10 @@ def spiral_contours(t, isocontours, start_index=0):
     return spiral, spiral_contour_indices
 
 
-def fermat_spiral(t, isocontours, start_pnt):
+def fermat_spiral(isocontours, start_pnt, offset):
     isocontours = [crv for crv in isocontours]
 
-    offset = float(t.get_extrude_width())*0.8
+    offset = float(offset)*0.8
 
     start_param = rs.CurveClosestPoint(isocontours[0], start_pnt)
     start = rs.EvaluateCurve(isocontours[0], start_param)
@@ -366,12 +364,12 @@ def fill_region(region_node, node, idx):
                 idx = idx + 1
 
 
-def connect_spiralled_nodes(t, root):
-    find_connections(t, root)
+def connect_spiralled_nodes(root, offset):
+    find_connections(root, offset)
     all_nodes = root.get_all_nodes([])
     all_nodes = {node.data: node for node in all_nodes}
 
-    path = connect_path(t, root, all_nodes, 0, [])
+    path = connect_path(root, offset, all_nodes, 0, [])
     spiral = []
     for p in range(len(path)):
         node = all_nodes[path[p][0]]
@@ -382,7 +380,7 @@ def connect_spiralled_nodes(t, root):
     return spiral
 
 
-def connect_path(t, node, all_nodes, start_idx, spiral):
+def connect_path(node, offset, all_nodes, start_idx, spiral):
     final_idx = len(node.fermat_spiral)-1
     if node.parent:
         final_idx = next(idx for idx in node.connection[node.parent.data] if idx != start_idx)
@@ -413,7 +411,7 @@ def connect_path(t, node, all_nodes, start_idx, spiral):
 
                 # recursively call connect_path on child
                 child_start_idx = node.connection[child.data][end_idx]
-                spiral = connect_path(t, child, all_nodes, child_start_idx, spiral)
+                spiral = connect_path(child, offset, all_nodes, child_start_idx, spiral)
 
                 # find next start index for node
                 other_idx = next(idx for idx in child.connection[node.data] if idx != child_start_idx)
@@ -468,19 +466,19 @@ def get_marching_indices(node, start, end, reverse):
             print("get_marching_indices error: start and end indices should not be the same")
 
 
-def find_connections(t, node):
+def find_connections(node, offset):
     for child in node.children:
-        find_connections(t, child)
+        find_connections(child, offset)
 
     parent = node.parent
     if parent!=None and parent.fermat_spiral!=None:
-        connect_node_to_parent(t, node, parent)
+        connect_node_to_parent(node, parent, offset)
 
 
-def connect_node_to_parent(t, node, parent):
-    offset = float(t.get_extrude_width())
+def connect_node_to_parent(node, parent, offset):
+    #offset = float(t.get_extrude_width())
 
-    node_start, node_end = get_connection_indices(t, node)
+    node_start, node_end = get_connection_indices(node, offset)
 
     points = node.fermat_spiral
     start_pnt = points[node_start]
@@ -533,8 +531,8 @@ def connect_node_to_parent(t, node, parent):
     node.connection[parent.data] = { node_start: parent_start, node_end: parent_end }
 
 
-def get_connection_indices(t, node):
-    offset = float(t.get_extrude_width())
+def get_connection_indices(node, offset):
+    #offset = float(t.get_extrude_width())
 
     start_index = 0
     end_index = len(node.fermat_spiral) - 1
@@ -692,7 +690,7 @@ def fill_curves_with_fermat_spiral(t, curves, bboxes=[], move_up=True, start_pnt
 
     # slice the shape
     # Generate isocontours
-    root, isocontours, contour_time = get_contours(t, curve, walls=walls, wall_mode=wall_mode, initial_offset=initial_offset)
+    root, isocontours, contour_time = get_contours(curve, extrude_width, walls=walls, wall_mode=wall_mode, initial_offset=initial_offset)
 
     st_time = time.time()
 
@@ -717,8 +715,8 @@ def fill_curves_with_fermat_spiral(t, curves, bboxes=[], move_up=True, start_pnt
                     num_pnts = get_num_points(n.sub_nodes[0], extrude_width)
                     if n.type == 1:
                         if n.parent:
-                            start_point = get_corner(t, n.sub_nodes[0], n.sub_nodes[-1])
-                        n.fermat_spiral = fermat_spiral(t, n.sub_nodes, start_point)
+                            start_point = get_corner(n.sub_nodes[0], n.sub_nodes[-1], extrude_width)
+                        n.fermat_spiral = fermat_spiral(n.sub_nodes, start_point, extrude_width)
                     elif n.type == 2:
                         n.fermat_spiral = rs.DivideCurve(n.sub_nodes[0], num_pnts)
                 elif len(n.sub_nodes) == 1:
@@ -728,7 +726,7 @@ def fill_curves_with_fermat_spiral(t, curves, bboxes=[], move_up=True, start_pnt
                     print("Error: node with no curves in it at all", n)
 
             if len(all_nodes) > 1:
-                inner_regions.append(connect_spiralled_nodes(t, region_tree))
+                inner_regions.append(connect_spiralled_nodes(region_tree, extrude_width))
             elif len(all_nodes) == 1:
                 inner_regions.append(all_nodes[0].fermat_spiral)
 
@@ -781,7 +779,7 @@ def fill_curves_with_spiral(t, curves, start_pnt=None, wall_first=False, initial
 
     # slice the shape
     # Generate isocontours
-    root, isocontours, contour_time = get_contours(t, curve, initial_offset=initial_offset)
+    root, isocontours, contour_time = get_contours(curve, extrude_width, initial_offset=initial_offset)
 
     travel_paths = []
 
@@ -834,7 +832,7 @@ def fill_curves_with_contours(t, curves, start_pnt=None, wall_mode=False, walls=
 
     # slice the shape
     # Generate isocontours
-    root, isocontours, contour_time = get_contours(t, curve, walls=walls, wall_mode=wall_mode, initial_offset=initial_offset)
+    root, isocontours, contour_time = get_contours(curve, extrude_width, walls=walls, wall_mode=wall_mode, initial_offset=initial_offset)
 
     isocontours = [rs.DivideCurve(i, int(rs.CurveLength(i)/t.get_resolution())) for i in isocontours]
 

@@ -1,7 +1,8 @@
 import Rhino
 import rhinoscriptsyntax as rs
 
-import time
+#import math
+#import time
 
 def get_area(curve):
     try:
@@ -93,10 +94,14 @@ def get_surface(curve, z):
 
 
 def get_num_points(curve, tolerance):
+    dist = get_segment_distance(tolerance)
+    return max(int(rs.CurveLength(curve)/dist), 4)
+
+def get_segment_distance(tolerance):
     # we justify a coefficient of 1/2, the points
     # overlap by half the extrusion width
-    k = 0.4
-    return max(int(rs.CurveLength(curve)/(float(tolerance)*k)), 4)
+    k = 0.75
+    return float(tolerance)*k
 
 
 def closest_point(point, points):
@@ -265,6 +270,21 @@ def split_curve(curve, split_point, tolerance):
     return split_curves, [intersections[0][1], intersections[1][1]]
 
 
+def get_corners(curve, resolution=None):
+    corners = []
+    if resolution!=None and resolution>0:
+        poly = rs.ConvertCurveToPolyline(curve, min_edge_length=resolution/4)
+    else: poly = rs.ConvertCurveToPolyline(curve)
+
+    for pnt in rs.PolylineVertices(poly):
+        curv = rs.CurveCurvature(curve, rs.CurveClosestPoint(curve, pnt))
+        if curv!=None and curv[3]<0.5:
+            corners.append(pnt)
+
+    return corners
+
+
+# Grid Class
 class Grid:
     def __init__(self, points, width):
         bbox = rs.BoundingBox(points)
