@@ -90,11 +90,12 @@ def get_isocontour(curve, offset, outer_curve):
     up = rs.VectorSubtract(rs.CreatePoint(points[0].X, points[0].Y, points[0].Z+1.0), points[0])
     for i in range(len(points)):
         # get tangent vector
-        #tangent = rs.CurveTangent(curve, rs.CurveClosestPoint(curve, points[i]))
-        #if tangent==None:
         prev_i = (i-1) % len(points)
         next_i = (i+1) % len(points)
         tangent = rs.VectorSubtract(points[next_i], points[prev_i])
+        if tangent.X == 0 and tangent.Y == 0 and tangent.Z == 0:
+            tangent = rs.CurveTangent(curve, rs.CurveClosestPoint(curve, points[i]))
+
         # get vector orthogonal to tangent vector
         if orientation == 1:
             ortho = rs.VectorCrossProduct(up, tangent)
@@ -102,6 +103,7 @@ def get_isocontour(curve, offset, outer_curve):
             ortho = rs.VectorCrossProduct(tangent, up)
         # normalize and scale orthogonal vector
         ortho = rs.VectorScale(ortho, offset/rs.VectorLength(ortho))
+
         # compute new point
         new_point = rs.VectorAdd(points[i], ortho)
 
