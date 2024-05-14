@@ -51,7 +51,7 @@ def get_isocontours(curve, offset, parent, wall_mode=False, walls=3):
         return curves
 
 
-def get_isocontour(curve, offset, outer_curve):
+def get_isocontour(curve, offset, outer_curve, reverse=False):
     if not curve:
         print("Error: get_isocontours not called with a curve", curve)
         return None
@@ -62,12 +62,6 @@ def get_isocontour(curve, offset, outer_curve):
             print("Error: get_isocontours called with an unclosable curve: ", curve)
             return None
 
-    #num_pnts = get_num_points(curve, offset)
-
-    #if num_pnts <= 5:
-    #    return None
-
-    #points = rs.DivideCurveEquidistant(curve, num_pnts) + get_corners(curve)
     dist = get_segment_distance(offset)
     points = [pnt for pnt in rs.DivideCurveEquidistant(curve, dist, True)] + get_corners(curve)
     points = sorted(points, key=lambda x: rs.CurveClosestPoint(curve, x))
@@ -77,9 +71,6 @@ def get_isocontour(curve, offset, outer_curve):
     # determine each new p' at distance offset away from p
     new_points_exist = False
     discarded_points_exist = False
-
-    #if len(points) % 2 == 0: short_pnts = len(points)/2
-    #else: short_pnts = int(math.floor(len(points)/2)) + 1
 
     orientation = rs.ClosedCurveOrientation(curve)
 
@@ -98,9 +89,11 @@ def get_isocontour(curve, offset, outer_curve):
 
         # get vector orthogonal to tangent vector
         if orientation == 1:
-            ortho = rs.VectorCrossProduct(up, tangent)
+            if reverse: ortho = rs.VectorCrossProduct(tangent, up)
+            else: ortho = rs.VectorCrossProduct(up, tangent)
         elif orientation == -1:
-            ortho = rs.VectorCrossProduct(tangent, up)
+            if reverse: ortho = rs.VectorCrossProduct(up, tangent)
+            else: ortho = rs.VectorCrossProduct(tangent, up)
         # normalize and scale orthogonal vector
         ortho = rs.VectorScale(ortho, offset/rs.VectorLength(ortho))
 
@@ -139,12 +132,12 @@ def get_isocontour(curve, offset, outer_curve):
                     elif new_points[next_i] != None and next_i != start_index:
                         init_sequences.append([])
 
-            # verify that broken pieces of curve are within parent contour
+            # verify that broken pieces of curve are inside or outside of parent contour
             sequences = []
             for seq in init_sequences:
-                if len(seq) > 1 and rs.PlanarClosedCurveContainment(rs.AddCurve([new_points[idx] for idx in seq+seq[-2:0:-1]+[seq[0]]]), curve)==2:
+                if len(seq) > 1 and ((reverse and rs.CurveCurveIntersection(rs.AddCurve([new_points[idx] for idx in seq]), curve)==None and rs.PointInPlanarClosedCurve(new_points[seq[0]], curve)==0) or (not reverse and rs.PlanarClosedCurveContainment(rs.AddCurve([new_points[idx] for idx in seq+seq[-2:0:-1]+[seq[0]]]), curve)==2)):
                     sequences.append(seq)
-                elif len(seq) == 1 and rs.PointInPlanarClosedCurve(new_points[seq[0]], curve)==1:
+                elif len(seq) == 1 and ((reverse and rs.PointInPlanarClosedCurve(new_points[seq[0]], curve)==0) or (not reverse and rs.PointInPlanarClosedCurve(new_points[seq[0]], curve)==1)):
                     sequences.append(seq)
 
             if len(sequences) == 0:
@@ -206,11 +199,11 @@ def get_isocontour(curve, offset, outer_curve):
 
             # Transform point lists into curves
             curves = [rs.AddCurve(c) for c in curves if len(c) > 2]
-            curves = [crv for crv in curves if rs.PlanarClosedCurveContainment(crv, outer_curve)==2]
+            curves = [crv for crv in curves if ((reverse and rs.CurveCurveIntersection(crv, outer_curve)==None) or (not reverse and rs.PlanarClosedCurveContainment(crv, outer_curve)==2))]
             return curves
         else:
             curves = [rs.AddCurve(new_points + [new_points[0]])]
-            curves = [crv for crv in curves if rs.PlanarClosedCurveContainment(crv, outer_curve)==2]
+            curves = [crv for crv in curves if ((reverse and rs.CurveCurveIntersection(crv, outer_curve)==None) or (not reverse and rs.PlanarClosedCurveContainment(crv, outer_curve)==2))]
             return curves
     else:
         return None
