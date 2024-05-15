@@ -19,7 +19,7 @@ import geometry_utils
 from geometry_utils import *
 
 
-# My vertical path finding code
+# Vertical path finding code
 def best_vertical_path(t, shape, curves, initial_offset=0.5):
     vert_start_time = time.time()
 
