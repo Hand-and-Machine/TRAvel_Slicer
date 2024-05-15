@@ -542,17 +542,12 @@ def get_connection_indices(node, offset):
     return start_index, end_index
 
 
-def fill_curves_with_fermat_spiral(t, curves, bboxes=[], move_up=True, start_pnt=None, wall_mode=False, walls=3, wall_first=False, initial_offset=0.5, spiral_seam=False):
+def fill_curve_with_fermat_spiral(t, curve, bboxes=[], move_up=True, start_pnt=None, wall_mode=False, walls=3, wall_first=False, spiral_seam=False):
     extrude_width = float(t.get_extrude_width())
-
-    # connect curves if given more than one
-    curve = curves[0]
-    if len(curves) > 1:
-        curve = connect_curves(curves, extrude_width*0.125)
 
     # slice the shape
     # Generate isocontours
-    root, isocontours, contour_time = get_contours(curve, extrude_width, walls=walls, wall_mode=wall_mode, initial_offset=initial_offset)
+    root, isocontours, contour_time = get_contours(curve, extrude_width, walls=walls, wall_mode=wall_mode)
 
     st_time = time.time()
 
@@ -600,16 +595,11 @@ def fill_curves_with_fermat_spiral(t, curves, bboxes=[], move_up=True, start_pnt
 
         outer_points = rs.PolylineVertices(rs.ConvertCurveToPolyline(outer_wall, min_edge_length=t.get_resolution()))
 
-        #outer_points = rs.DivideCurve(outer_wall, int(rs.CurveLength(outer_wall)/(amt*t.get_resolution())))
-        #if outer_points == None:
-        #    outer_points = rs.DivideCurve(outer_wall, get_num_points(outer_wall, extrude_width))
-
         if wall_first:
             outer_travel_paths = outer_travel_paths + draw_points(t, outer_points, 0, bboxes=bboxes, move_up=move_up, spiral_seam=spiral_seam)
             final_spiral = final_spiral + outer_points
         for region in inner_regions:
             region_curve = rs.AddCurve(region)
-            #region_points = rs.DivideCurve(region_curve, int(rs.CurveLength(region_curve)/(amt*t.get_resolution())))
             region_points = rs.PolylineVertices(rs.ConvertCurveToPolyline(region_curve, min_edge_length=t.get_resolution()))
             if region_points==None: region_points = region
             travel_paths = draw_points(t, region_points, 0, bboxes=bboxes, move_up=move_up, spiral_seam=False)
@@ -631,17 +621,12 @@ def fill_curves_with_fermat_spiral(t, curves, bboxes=[], move_up=True, start_pnt
     return outer_travel_paths, inner_travel_paths, start_point, contour_time, fermat_time
 
 
-def fill_curves_with_spiral(t, curves, start_pnt=None, wall_first=False, initial_offset=0.5):
+def fill_curve_with_spiral(t, curve, start_pnt=None, wall_first=False):
     extrude_width = float(t.get_extrude_width())
-
-    # connect curves if given more than one
-    curve = curves[0]
-    if len(curves) > 1:
-        curve = connect_curves(curves, extrude_width*0.125)
 
     # slice the shape
     # Generate isocontours
-    root, isocontours, contour_time = get_contours(curve, extrude_width, initial_offset=initial_offset)
+    root, isocontours, contour_time = get_contours(curve, extrude_width)
 
     travel_paths = []
 
@@ -682,19 +667,12 @@ def fill_curves_with_spiral(t, curves, start_pnt=None, wall_first=False, initial
     return travel_paths
 
 
-def fill_curves_with_contours(t, curves, start_pnt=None, wall_mode=False, walls=3, initial_offset=0.5):
+def fill_curve_with_contours(t, curve, start_pnt=None, wall_mode=False, walls=3):
     extrude_width = float(t.get_extrude_width())
-
-    # connect curves if given more than one
-    connect_curve_time = time.time()
-    curve = curves[0]
-    if len(curves) > 1:
-        curve = connect_curves(curves, extrude_width*0.125)
-    print("Time to connect curves: "+str(round(time.time()-connect_curve_time, 3))+" seconds")
 
     # slice the shape
     # Generate isocontours
-    root, isocontours, contour_time = get_contours(curve, extrude_width, walls=walls, wall_mode=wall_mode, initial_offset=initial_offset)
+    root, isocontours, contour_time = get_contours(curve, extrude_width, walls=walls, wall_mode=wall_mode)
 
     isocontours = [rs.DivideCurve(i, int(rs.CurveLength(i)/t.get_resolution())) for i in isocontours]
 
@@ -726,17 +704,21 @@ def slice_fermat_fill(t, shape, start_pnt=None, start=0, end=None, wall_mode=Fal
 
     if end is None: end = layers
 
+    extrude_width = float(t.get_extrude_width())
+    gap = 0.2*extrude_width
+
     for l in range(start, min(layers, end)):
         get_group_curves_start = time.time()
         curve_groups = get_curves(shape, l*t.get_layer_height())
+        curves = connect_curve_groups(curve_groups, gap, initial_offset=initial_offset*extrude_width)
         print("Time to get and group curves: "+str(round(time.time()-get_group_curves_start, 3))+" seconds")
 
-        for crvs in curve_groups:
+        for crv in curves:
             if start_pnt == None: start_pnt = t.get_position()
             if not wall_mode or (wall_mode and fill_bottom and l<bottom_layers):
-                travel_paths = travel_paths + fill_curves_with_fermat_spiral(t, crvs, start_pnt=start_pnt, initial_offset=initial_offset)[0]
+                travel_paths = travel_paths + fill_curve_with_fermat_spiral(t, crv, start_pnt=start_pnt)[0]
             else:
-                travel_paths = travel_paths + fill_curves_with_fermat_spiral(t, crvs, start_pnt=start_pnt, wall_mode=wall_mode, walls=walls, initial_offset=initial_offset)[0]
+                travel_paths = travel_paths + fill_curve_with_fermat_spiral(t, crv, start_pnt=start_pnt, wall_mode=wall_mode, walls=walls)[0]
 
     return travel_paths
 
@@ -749,15 +731,19 @@ def slice_spiral_fill(t, shape, start_pnt=None, start=0, end=None, wall_mode=Fal
 
     if end is None: end = layers
 
+    extrude_width = float(t.get_extrude_width())
+    gap = 0.2*extrude_width
+
     for l in range(start, min(layers, end)):
         curve_groups = get_curves(shape, l*t.get_layer_height())
+        curves = connect_curve_groups(curve_groups, gap, initial_offset=initial_offset*extrude_width)
 
-        for crvs in curve_groups:
+        for crv in curves:
             if start_pnt == None: start_pnt = t.get_position()
             if not wall_mode or (wall_mode and fill_bottom and l<bottom_layers):
-                travel_paths = travel_paths + fill_curves_with_spiral(t, crvs, start_pnt=start_pnt, initial_offset=initial_offset)
+                travel_paths = travel_paths + fill_curve_with_spiral(t, crv, start_pnt=start_pnt)
             else:
-                travel_paths = travel_paths + fill_curves_with_spiral(t, crvs, start_pnt=start_pnt, wall_mode=wall_mode, walls=walls, initial_offset=initial_offset)
+                travel_paths = travel_paths + fill_curve_with_spiral(t, crv, start_pnt=start_pnt, wall_mode=wall_mode, walls=walls)
 
     return travel_paths
 
@@ -770,14 +756,18 @@ def slice_contour_fill(t, shape, start=0, end=None, wall_mode=False, walls=3, fi
 
     if end is None: end = layers
 
+    extrude_width = float(t.get_extrude_width())
+    gap = 0.2*extrude_width
+
     for l in range(start, min(layers, end)):
         curve_groups = get_curves(shape, l*t.get_layer_height())
+        curves = connect_curve_groups(curve_groups, gap, initial_offset=initial_offset*extrude_width)
 
-        for crvs in curve_groups:
+        for crv in curves:
             if not wall_mode or (wall_mode and fill_bottom and l<bottom_layers):
-                travel_paths = travel_paths + fill_curves_with_contours(t, crvs, start_pnt=t.get_position(), initial_offset=initial_offset)
+                travel_paths = travel_paths + fill_curve_with_contours(t, crv, start_pnt=t.get_position())
             else:
-                travel_paths = travel_paths + fill_curves_with_contours(t, crvs, start_pnt=t.get_position(), wall_mode=wall_mode, walls=walls, initial_offset=initial_offset)
+                travel_paths = travel_paths + fill_curve_with_contours(t, crv, start_pnt=t.get_position(), wall_mode=wall_mode, walls=walls)
 
     return travel_paths
 
@@ -787,7 +777,7 @@ def slice_vertical_and_fermat_fill(t, shape, all_curves, wall_mode=False, walls=
 
     inner_travel_paths = []
     outer_travel_paths = []
-    tree, node_path, path, edges = best_vertical_path(t, shape, all_curves)
+    tree, node_path, path, edges = best_vertical_path(t, shape, all_curves, initial_offset=initial_offset)
 
     contour_time = 0
     fermat_time = 0
@@ -806,13 +796,13 @@ def slice_vertical_and_fermat_fill(t, shape, all_curves, wall_mode=False, walls=
             start_point = t.get_position()
             for curves in node.data:
                 if not wall_mode or (wall_mode and fill_bottom and node.height<bottom_layers):
-                    outer_travel, inner_travel, start_point, c_time, f_time = fill_curves_with_fermat_spiral(t, curves, bboxes=boxes, move_up=move_up, start_pnt=start_point, initial_offset=initial_offset, spiral_seam=spiral_seam)
+                    outer_travel, inner_travel, start_point, c_time, f_time = fill_curve_with_fermat_spiral(t, curves[0], bboxes=boxes, move_up=move_up, start_pnt=start_point, spiral_seam=spiral_seam)
                     outer_travel_paths = outer_travel_paths + outer_travel
                     inner_travel_paths = inner_travel_paths + inner_travel
                     contour_time = contour_time + c_time
                     fermat_time = fermat_time + f_time
                 else:
-                    outer_travel, inner_travel, start_point, c_time, f_time = fill_curves_with_fermat_spiral(t, curves, bboxes=boxes, move_up=move_up, start_pnt=start_point, wall_mode=wall_mode, walls=walls, initial_offset=initial_offset, spiral_seam=spiral_seam)
+                    outer_travel, inner_travel, start_point, c_time, f_time = fill_curve_with_fermat_spiral(t, curves[0], bboxes=boxes, move_up=move_up, start_pnt=start_point, wall_mode=wall_mode, walls=walls, spiral_seam=spiral_seam)
                     outer_travel_paths = outer_travel_paths + outer_travel
                     inner_travel_paths = inner_travel_paths + inner_travel
                     contour_time = contour_time + c_time

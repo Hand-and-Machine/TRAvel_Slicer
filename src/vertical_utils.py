@@ -12,12 +12,15 @@ from Node import *
 import Graph
 from Graph import *
 
+import contour_utils
+from contour_utils import *
+
 import geometry_utils
 from geometry_utils import *
 
 
 # My vertical path finding code
-def best_vertical_path(t, shape, curves):
+def best_vertical_path(t, shape, curves, initial_offset=0.5):
     vert_start_time = time.time()
 
     global nozzle_width
@@ -35,7 +38,7 @@ def best_vertical_path(t, shape, curves):
     overlap = {}
 
     total_height = len(curves)*t.get_layer_height()
-    init_tree = build_vertical_tree(t, shape, curves)
+    init_tree = build_vertical_tree(t, shape, curves, initial_offset=initial_offset)
     vert_tree = segment_tree_by_height(t, init_tree, total_height)
     if len(vert_tree.get_all_nodes([])) > len(init_tree.get_all_nodes([])):
         raise ValueError("There should not be more super nodes than nodes")
@@ -168,7 +171,7 @@ def best_vertical_path(t, shape, curves):
     return vert_tree, node_path, path, edges
 
 
-def build_vertical_tree(t, shape, all_curves):
+def build_vertical_tree(t, shape, all_curves, initial_offset=0.5):
     start_time = time.time()
 
     print('Number of layers: '+str(len(all_curves)))
@@ -178,9 +181,9 @@ def build_vertical_tree(t, shape, all_curves):
 
     time1 = 0
 
-    #extrude_width = float(t.get_extrude_width())
-    #initial_offset = extrude_width*0.5
-    #gap = extrude_width*0.125
+    extrude_width = float(t.get_extrude_width())
+    initial_offset = extrude_width*initial_offset
+    gap = extrude_width*0.125
 
     center_point = rs.CreatePoint(0, 0, 0)
     previous_nodes = [root]
@@ -188,7 +191,8 @@ def build_vertical_tree(t, shape, all_curves):
         st_1 = time.time()
         initial_curves = all_curves[l]
         curve_groups = get_curves(shape, rs.CurveStartPoint(initial_curves[0]).Z, initial_curves=initial_curves)
-        #curve_groups = connect_curve_groups(curve_groups, gap, initial_offset=initial_offset)
+        curve_groups = connect_curve_groups(curve_groups, gap, initial_offset=initial_offset)
+        curve_groups = [[crv] for crv in curve_groups]
         time1 = time1 + time.time()-st_1
 
         outer_curves = []

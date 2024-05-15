@@ -12,13 +12,10 @@ from Node import *
 import geometry_utils
 from geometry_utils import *
 
-def get_contours(curve, offset, walls=3, wall_mode=False, initial_offset=0.5):
+def get_contours(curve, offset, walls=3, wall_mode=False):
     all_contours_time = time.time()
 
-    if initial_offset > 0:
-        first_contours = get_isocontour(curve, offset*initial_offset)
-    else:
-        first_contours = [curve]
+    first_contours = [curve]
 
     root = Node("root")
     root.depth = -1
@@ -252,15 +249,15 @@ def connect_curve_groups(curve_groups, gap, initial_offset=0.0):
             else: connect.append(crvs[c])
 
         if all([rs.PlanarClosedCurveContainment(connect[c], connect[0])==2 for c in range(1, len(connect))]):
-            print("All expanded hole curves are inside the contracted outer curve.")
+            # All expanded hole curves are inside the contracted outer curve.
             connected_curves.append(connect_curves(connect, gap))
         else:
-            print("Expanded hole curves are not all inside the contracted outer curve.")
+            # Expanded hole curves are not all inside the contracted outer curve.
             if all([rs.PlanarClosedCurveContainment(crvs[c], connect[0])==2 for c in range(1, len(crvs))]):
-                print("All original hole curves are inside the contracted outer curve.")
+                # All original hole curves are inside the contracted outer curve.
                 connected_curves.append(connect_curves(connect[0]+crvs[1:], gap))
             else:
-                print("Original hole curves are not all inside the contracted outer curve.")
+                # Original hole curves are not all inside the contracted outer curve.
                 connected_curves.append(connect_curves(crvs, gap))
     
     return connected_curves
