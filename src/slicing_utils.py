@@ -15,9 +15,6 @@ from vertical_utils import *
 import contour_utils
 from contour_utils import *
 
-import graph_utils
-from graph_utils import *
-
 max_z = 0
 
 def draw_points(t, points, start_idx=0, bboxes=[], move_up=True, spiral_seam=False):
@@ -306,27 +303,6 @@ def fermat_spiral(isocontours, start_pnt, offset):
     return rs.DivideCurve(spiraled_curve, get_num_points(spiraled_curve, offset))
 
 
-def trim_curve(curve, offset, start_pnt):
-    start_param = rs.CurveClosestPoint(curve, start_pnt)
-    start = rs.EvaluateCurve(curve, start_param)
-    split_circ = rs.AddCircle(start, offset)
-    intersection = rs.CurveCurveIntersection(curve, split_circ)
-
-    if intersection==None:
-        return curve
-
-    param = intersection[0][5]
-    for i in range(len(intersection)):
-        inter = intersection[i]
-        if inter[0] == 1:
-            trim_crv = rs.TrimCurve(curve, [start_param, inter[5]], delete_input=False)
-            crv_length = rs.CurveLength(trim_crv)
-            if crv_length<offset*2:
-                param = inter[5]
-    
-    return rs.TrimCurve(curve, [param, start_param], delete_input=False)
-
-
 def segment_tree(root):
     region_root = Node("0")
     fill_region(region_root, root, 0)
@@ -564,120 +540,6 @@ def get_connection_indices(node, offset):
         end_index = closest["point"]
     
     return start_index, end_index
-
-
-def connect_curves(curves, offset):
-    # order curves by surface area, outermost curve will
-    # have the largest surface area
-    #curves = sorted(curves, key=lambda x: get_size(x), reverse=True)
-
-    # construct a fully connected graph where each curve
-    # represents a single node in the graph, and edges
-    # are the minimum distance between each curve
-    graph = Graph()
-    for c in range(len(curves)):
-        node = Graph_Node(curves[c])
-        node.name = 'c' + str(c)
-        graph.add_node(node)
-
-    # find closest points between all curves and add edges
-    closest = {}
-    for c1 in range(len(curves)):
-        curve1 = curves[c1]
-        for c2 in range(c1+1, len(curves)):
-            curve2 = curves[c2]
-            id, pnt1, pnt2 = rs.CurveClosestObject(curve1, curve2)
-            weight = rs.Distance(pnt1, pnt2)
-
-            node1 = graph.get_node(curve1)
-            node2 = graph.get_node(curve2)
-            graph.add_edge(Graph_Edge(node1, node2, weight))
-            graph.add_edge(Graph_Edge(node2, node1, weight))
-
-            if closest.get(node1) == None: closest[node1] = {}
-            if closest.get(node2) == None: closest[node2] = {}
-            closest[node1][node2] = (pnt2, pnt1, weight)
-
-    # trim graph by ordering edges from most weighted to least
-    ordered_edges = get_edge_tuples(graph)
-
-    # remove edges, starting with most weighted and determine
-    # if nodes are still reachable from the start node
-    start_node = graph.get_node(curves[0])
-    for edge in ordered_edges:
-        node1 = edge[0]
-        node2 = edge[1]
-        weight = edge[2]
-        graph.remove_edge(node1, node2)
-        graph.remove_edge(node2, node1)
-
-        for node in graph.nodes:
-            if node != start_node:
-                if not graph.check_for_path(start_node, node)[0]:
-                    # add edge back if unable to reach all nodes
-                    # in graph from the start node (outermost curve)
-                    graph.add_edge(Graph_Edge(node1, node2, weight))
-                    graph.add_edge(Graph_Edge(node2, node1, weight))
-                    break
-
-    # split curves at shortest connection points to other curves
-    final_curve = None
-    min_edges = get_edge_tuples(graph)
-    for edge in min_edges:
-        node1 = edge[0]
-        node2 = edge[1]
-        split_point1 = get_connect_point(closest, node1, node2)[0]
-        split_curves1, split_ends1 = split_curve(node1.data, split_point1, tolerance=offset)
-        split_point2 = get_connect_point(closest, node2, node1)[0]
-        split_curves2, split_ends2 = split_curve(node2.data, split_point2, tolerance=offset)
-
-        pnt1_1 = split_ends1[0]
-        pnt1_2 = split_ends1[1]
-        pnt2_1 = split_ends2[0]
-        pnt2_2 = split_ends2[1]
-
-        all_curves = split_curves1 + split_curves2
-
-        crv1 = rs.AddCurve([pnt1_1, pnt2_1])
-        crv2 = rs.AddCurve([pnt1_2, pnt2_2])
-        intersect = rs.PlanarCurveCollision(crv1, crv2)
-
-        if not intersect:
-            all_curves.append(crv1)
-            all_curves.append(crv2)
-        else:
-            all_curves.append(rs.AddCurve([pnt1_1, pnt2_2]))
-            all_curves.append(rs.AddCurve([pnt1_2, pnt2_1]))
-        
-        final_curve = rs.JoinCurves(all_curves)[0]
-        node1.data = final_curve
-        node2.data = final_curve
-
-    return final_curve
-
-
-def get_connect_point(closest, node1, node2):
-    split_point = None
-    connection = closest[node1].get(node2)
-    if connection:
-        split_point = connection[0]
-    else:
-        connection = closest[node2].get(node1)
-        split_point = connection[1]
-
-    weight = connection[2]
-    return split_point, weight
-
-
-def get_edge_tuples(graph):
-    ordered_edges = []
-    for node1 in graph.edges:
-        for node2 in graph.edges[node1]:
-            weight = graph.edges[node1][node2]
-            if (node1, node2, weight) not in ordered_edges and (node2, node1, weight) not in ordered_edges:
-                ordered_edges.append((node1, node2, weight))
-
-    return sorted(ordered_edges, key=lambda x: x[2], reverse=True)
 
 
 def fill_curves_with_fermat_spiral(t, curves, bboxes=[], move_up=True, start_pnt=None, wall_mode=False, walls=3, wall_first=False, initial_offset=0.5, spiral_seam=False):

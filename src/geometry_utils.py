@@ -1,8 +1,8 @@
 import Rhino
 import rhinoscriptsyntax as rs
 
-#import math
-#import time
+import Graph
+from Graph import *
 
 def get_area(curve):
     try:
@@ -96,6 +96,7 @@ def get_surface(curve, z):
 def get_num_points(curve, tolerance):
     dist = get_segment_distance(tolerance)
     return max(int(rs.CurveLength(curve)/dist), 4)
+
 
 def get_segment_distance(tolerance):
     # we justify a coefficient of 1/2, the points
@@ -237,83 +238,3 @@ def get_curve_groupings(curves):
     groups = [[c]+curve_groupings[c] for c in curve_groupings]
     curves = [[curves[c] for c in g] for g in groups]
     return curves
-
-def split_curve_at(curve, points, tolerance=0):
-    curves = [curve]
-    split_ends = []
-
-    for point in points:
-        for crv in curves:
-            closest_pnt = rs.EvaluateCurve(crv, rs.CurveClosestPoint(crv, point))
-            if rs.Distance(closest_pnt, point) < tolerance:
-                curves.remove(crv)
-                split_curves, ends = split_curve(crv, point, tolerance)
-                split_ends = split_ends + ends
-                curves = curves + split_curves
-                break
-    
-    return curves, split_ends
-
-
-def split_curve(curve, split_point, tolerance):
-    split_circ = rs.AddCircle(split_point, tolerance/2)
-    intersections = rs.CurveCurveIntersection(curve, split_circ)
-
-    split_curves = [curve]
-    if intersections!=None and len(intersections)>1:
-        split_curves = rs.TrimCurve(curve, [intersections[1][5], intersections[0][5]])
-        if type(split_curves) != list:
-            split_curves = [split_curves]
-    else:
-        print("Error: Unable to split curve at point.")
-    
-    return split_curves, [intersections[0][1], intersections[1][1]]
-
-
-def get_corners(curve, resolution=None):
-    corners = []
-    if resolution!=None and resolution>0:
-        poly = rs.ConvertCurveToPolyline(curve, min_edge_length=resolution/4)
-    else: poly = rs.ConvertCurveToPolyline(curve)
-
-    for pnt in rs.PolylineVertices(poly):
-        curv = rs.CurveCurvature(curve, rs.CurveClosestPoint(curve, pnt))
-        if curv!=None and curv[3]<0.5:
-            corners.append(pnt)
-
-    return corners
-
-
-# Grid Class
-class Grid:
-    def __init__(self, points, width):
-        bbox = rs.BoundingBox(points)
-        self.minX = bbox[0].X
-        self.minY = bbox[0].Y
-        self.width = float(width)
-
-        self.max_x_idx = int((bbox[2].X - self.minX) // self.width)
-        self.max_y_idx = int((bbox[2].Y - self.minY) // self.width)
-
-        self.grid = [[[] for _ in range(self.max_y_idx+1)] for _ in range(self.max_x_idx+1)]
-
-        for point in points:
-            x_idx = int((point.X - self.minX) // self.width)
-            y_idx = int((point.Y - self.minY) // self.width)
-
-            self.grid[x_idx][y_idx].append(point)
-
-    def get_neighbors(self, point, neighborhood=1):
-        x_idx = max(min(int((point.X - self.minX) // self.width), self.max_x_idx), 0)
-        y_idx = max(min(int((point.Y - self.minY) // self.width), self.max_y_idx), 0)
-
-        # start with center
-        points = self.grid[x_idx][y_idx]
-
-        # retrieve neighbors
-        for x in range(max(0, x_idx-neighborhood), min(self.max_x_idx, x_idx+neighborhood+1)):
-            for y in range(max(0, y_idx-neighborhood), min(self.max_y_idx, y_idx+neighborhood)+1):
-                if not (x==x_idx and y==y_idx):
-                    points = points + self.grid[x][y]
-        
-        return points

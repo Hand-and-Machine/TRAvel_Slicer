@@ -6,11 +6,11 @@ import extruder_turtle
 import turtle_utilities as tu
 from extruder_turtle import *
 
-import tree_utils
-from tree_utils import *
+import Node
+from Node import *
 
-import graph_utils
-from graph_utils import *
+import Graph
+from Graph import *
 
 import geometry_utils
 from geometry_utils import *
@@ -178,12 +178,17 @@ def build_vertical_tree(t, shape, all_curves):
 
     time1 = 0
 
+    #extrude_width = float(t.get_extrude_width())
+    #initial_offset = extrude_width*0.5
+    #gap = extrude_width*0.125
+
     center_point = rs.CreatePoint(0, 0, 0)
     previous_nodes = [root]
     for l in range(len(all_curves)):
         st_1 = time.time()
         initial_curves = all_curves[l]
         curve_groups = get_curves(shape, rs.CurveStartPoint(initial_curves[0]).Z, initial_curves=initial_curves)
+        #curve_groups = connect_curve_groups(curve_groups, gap, initial_offset=initial_offset)
         time1 = time1 + time.time()-st_1
 
         outer_curves = []
