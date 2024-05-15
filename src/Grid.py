@@ -9,8 +9,8 @@ class Grid:
         self.minY = bbox[0].Y - width
         self.width = float(width)
 
-        self.max_x_idx = int((bbox[2].X - self.minX) // self.width) + 2
-        self.max_y_idx = int((bbox[2].Y - self.minY) // self.width) + 2
+        self.max_x_idx = int((bbox[2].X - self.minX) // self.width) + 1
+        self.max_y_idx = int((bbox[2].Y - self.minY) // self.width) + 1
 
         self.grid = [[[] for _ in range(self.max_y_idx+1)] for _ in range(self.max_x_idx+1)]
 
