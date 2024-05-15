@@ -183,7 +183,7 @@ def build_vertical_tree(t, shape, all_curves, initial_offset=0.5):
 
     extrude_width = float(t.get_extrude_width())
     initial_offset = extrude_width*initial_offset
-    gap = extrude_width*0.125
+    gap = extrude_width*0.2
 
     center_point = rs.CreatePoint(0, 0, 0)
     previous_nodes = [root]
