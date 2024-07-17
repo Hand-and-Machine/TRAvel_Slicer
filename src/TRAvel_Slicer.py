@@ -6,18 +6,18 @@ import extruder_turtle
 import turtle_utilities as tu
 from extruder_turtle import *
 
+import outer_travel_utils
+from outer_travel_utils import *
+
 import geometry_utils
 from geometry_utils import *
-
-import vertical_utils
-from vertical_utils import *
 
 import contour_utils
 from contour_utils import *
 
 max_z = 0
 
-def draw_points(t, points, start_idx=0, bboxes=[], move_up=True, spiral_seam=False):
+def draw_points(t, points, start_idx=0, bboxes=[], move_up=True, spiral_seam=False, outer_wall=False):
     global max_z
 
     travel = []
@@ -99,6 +99,34 @@ def draw_points(t, points, start_idx=0, bboxes=[], move_up=True, spiral_seam=Fal
         t.set_speed(speed)
 
     return travel
+
+
+def get_transition_movements(t, node_path, start_point):
+    boxes = []
+    seam_points = []
+    transitions = []
+
+    for s in range(len(node_path)):
+        if node_path[s].data.height!=node_path[s-1].data.height:
+            # only compare to boxes within nozzle height chunk
+            boxes = []
+        if node_path[s].data.box!=None: boxes.append(node_path[s].data.box)
+
+        for node in node_path[s].data.sub_nodes:
+            curves = node.data
+            for crvs in curves:
+                dist = 100000000000
+                s_pnt = None
+                for crv in crvs:
+                    pnt = rs.EvaluateCurve(crv, rs.CurveClosestPoint(crv, start_point))
+                    d = rs.Distance(start_point, pnt)
+                    if d < dist:
+                        dist = d
+                        s_pnt = pnt
+                start_point = s_pnt
+                seam_points.append(start_point)
+
+    return seam_points, transitions
 
 
 def check_path_intersection(t, path, boxes):
@@ -236,8 +264,8 @@ def spiral_contours(t, isocontours, start_index=0):
     return spiral, spiral_contour_indices
 
 
-def fermat_spiral(isocontours, start_pnt, offset):
-    isocontours = [crv for crv in isocontours]
+def fermat_spiral(contours, start_pnt, offset):
+    isocontours = [crv for crv in contours]
 
     offset = float(offset)*0.8
 
@@ -298,9 +326,20 @@ def fermat_spiral(isocontours, start_pnt, offset):
         if trims[i][1] < 0.0000001: trims[i][1] = 0.0
         isocontours[i] = rs.TrimCurve(isocontours[i], trims[i], delete_input=False)
 
-    spiraled_curve = rs.JoinCurves(isocontours+joining_curves)
+    spiraled_curve = rs.JoinCurves(isocontours+joining_curves, tolerance=offset/2.)
+    if len(spiraled_curve) > 1:
+        print(rs.CurveStartPoint(spiraled_curve[0]).Z)
+        for sp_crv in spiraled_curve:
+            print(rs.CurveLength(sp_crv))
+        spiraled_curve = [sp_crv for sp_crv in spiraled_curve if rs.CurveLength(sp_crv)>offset]
+        print(spiraled_curve)
 
-    return rs.DivideCurve(spiraled_curve, get_num_points(spiraled_curve, offset))
+    try:
+        return rs.DivideCurve(spiraled_curve, get_num_points(spiraled_curve, offset))
+    except:
+        print("Error dividing curve: ", spiraled_curve)
+        crv = sorted(spiraled_curve, key=lambda x: rs.CurveLength(x))[-1]
+        return rs.DivideCurve(crv, get_num_points(crv, offset))
 
 
 def segment_tree(root):
@@ -572,13 +611,15 @@ def fill_curve_with_fermat_spiral(t, curve, bboxes=[], move_up=True, start_pnt=N
                     num_pnts = get_num_points(n.sub_nodes[0], extrude_width)
                     if n.type == 1:
                         if n.parent:
-                            start_point = get_corner(n.sub_nodes[0], n.sub_nodes[-1], extrude_width)
+                            #start_point = get_corner(n.sub_nodes[0], n.sub_nodes[-1], extrude_width)
+                            start_point = rs.CurveClosestObject(n.sub_nodes[0], n.sub_nodes[-1])[1]
                         n.fermat_spiral = fermat_spiral(n.sub_nodes, start_point, extrude_width)
                     elif n.type == 2:
                         n.fermat_spiral = rs.DivideCurve(n.sub_nodes[0], num_pnts)
                 elif len(n.sub_nodes) == 1:
                     num_pnts = get_num_points(n.sub_nodes[0], extrude_width)
-                    n.fermat_spiral = rs.DivideCurve(trim_curve(n.sub_nodes[0], extrude_width*0.25, start_point), num_pnts)
+                    #n.fermat_spiral = rs.DivideCurve(trim_curve(n.sub_nodes[0], extrude_width*0.25, start_point), num_pnts)
+                    n.fermat_spiral = rs.DivideCurve(n.sub_nodes[0], num_pnts)
                 else:
                     print("Error: node with no curves in it at all", n)
 
@@ -772,17 +813,21 @@ def slice_contour_fill(t, shape, start=0, end=None, wall_mode=False, walls=3, fi
     return travel_paths
 
 
-def slice_vertical_and_fermat_fill(t, shape, all_curves, wall_mode=False, walls=3, fill_bottom=False, bottom_layers=3, initial_offset=0.5, spiral_seam=False):
+def TRAvel_Slice(t, shape, all_curves, wall_mode=False, walls=3, fill_bottom=False, bottom_layers=3, initial_offset=0.5, spiral_seam=False, debug=False):
     overall_start_time = time.time()
 
     inner_travel_paths = []
     outer_travel_paths = []
-    tree, node_path, path, edges = best_vertical_path(t, shape, all_curves, initial_offset=initial_offset)
+    #tree, node_path, path, edges = best_vertical_path(t, shape, all_curves, initial_offset=initial_offset)
+    #node_path, path = outer_travel_reduction(t, shape, all_curves, initial_offset=initial_offset)
+    tree, node_path, path, edges = outer_travel_reduction(t, shape, all_curves, initial_offset=initial_offset, debug=debug)
 
     contour_time = 0
     fermat_time = 0
 
     start_point = t.get_position()
+    extrude_width = t.get_extrude_width()
+    gap = 0.2*extrude_width
     boxes = []
     move_up = False
     for s in range(len(node_path)):
@@ -792,17 +837,17 @@ def slice_vertical_and_fermat_fill(t, shape, all_curves, wall_mode=False, walls=
         if node_path[s].data.box!=None: boxes.append(node_path[s].data.box)
 
         for node in node_path[s].data.sub_nodes:
-            #print("Layer "+str(node.height)+", z: "+str(rs.CurveStartPoint(node.data[0][0]).Z))
             start_point = t.get_position()
-            for curves in node.data:
+            curves = connect_curve_groups(node.data, gap, initial_offset=initial_offset)
+            for curve in curves:
                 if not wall_mode or (wall_mode and fill_bottom and node.height<bottom_layers):
-                    outer_travel, inner_travel, start_point, c_time, f_time = fill_curve_with_fermat_spiral(t, curves[0], bboxes=boxes, move_up=move_up, start_pnt=start_point, spiral_seam=spiral_seam)
+                    outer_travel, inner_travel, start_point, c_time, f_time = fill_curve_with_fermat_spiral(t, curve, bboxes=boxes, move_up=move_up, start_pnt=start_point, spiral_seam=spiral_seam)
                     outer_travel_paths = outer_travel_paths + outer_travel
                     inner_travel_paths = inner_travel_paths + inner_travel
                     contour_time = contour_time + c_time
                     fermat_time = fermat_time + f_time
                 else:
-                    outer_travel, inner_travel, start_point, c_time, f_time = fill_curve_with_fermat_spiral(t, curves[0], bboxes=boxes, move_up=move_up, start_pnt=start_point, wall_mode=wall_mode, walls=walls, spiral_seam=spiral_seam)
+                    outer_travel, inner_travel, start_point, c_time, f_time = fill_curve_with_fermat_spiral(t, curve, bboxes=boxes, move_up=move_up, start_pnt=start_point, wall_mode=wall_mode, walls=walls, spiral_seam=spiral_seam)
                     outer_travel_paths = outer_travel_paths + outer_travel
                     inner_travel_paths = inner_travel_paths + inner_travel
                     contour_time = contour_time + c_time
@@ -810,8 +855,9 @@ def slice_vertical_and_fermat_fill(t, shape, all_curves, wall_mode=False, walls=
             move_up = False
         move_up = True
 
-    print("Contour generation time: "+str(round(contour_time, 3))+" seconds")
-    print("Fermat Spiraling time: "+str(round(fermat_time, 3))+" seconds")
-    print("Full path generation: "+str(round(time.time()-overall_start_time, 3))+" seconds")
+    if debug:
+        print("Contour generation time: "+str(round(contour_time, 3))+" seconds")
+        print("Fermat Spiraling time: "+str(round(fermat_time, 3))+" seconds")
+        print("Full path generation: "+str(round(time.time()-overall_start_time, 3))+" seconds")
 
-    return outer_travel_paths, inner_travel_paths, tree, node_path, edges
+    return outer_travel_paths, inner_travel_paths, tree, node_path, path, edges

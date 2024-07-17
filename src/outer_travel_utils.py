@@ -19,8 +19,8 @@ import geometry_utils
 from geometry_utils import *
 
 
-# Vertical path finding code
-def best_vertical_path(t, shape, curves, initial_offset=0.5):
+# Outer-Travel Reduction code
+def outer_travel_reduction(t, shape, curves, initial_offset=0.5, debug=False):
     vert_start_time = time.time()
 
     global nozzle_width
@@ -38,8 +38,8 @@ def best_vertical_path(t, shape, curves, initial_offset=0.5):
     overlap = {}
 
     total_height = len(curves)*t.get_layer_height()
-    init_tree = build_vertical_tree(t, shape, curves, initial_offset=initial_offset)
-    vert_tree = segment_tree_by_height(t, init_tree, total_height)
+    init_tree = build_height_dependence_tree(t, shape, curves, initial_offset=initial_offset, debug=debug)
+    vert_tree = segment_tree_by_height(t, init_tree, total_height, debug=debug)
     if len(vert_tree.get_all_nodes([])) > len(init_tree.get_all_nodes([])):
         raise ValueError("There should not be more super nodes than nodes")
 
@@ -90,7 +90,7 @@ def best_vertical_path(t, shape, curves, initial_offset=0.5):
         except:
             print("Could not get bounding box: ", [rs.ObjectType(f) for f in flat])
 
-    print("Size of grouped height tree: "+str(len(all_nodes)))
+    if debug: print("Size of grouped height tree: "+str(len(all_nodes)))
 
     st_time = time.time()
 
@@ -100,7 +100,7 @@ def best_vertical_path(t, shape, curves, initial_offset=0.5):
     node_path = []
     for h in range(int(math.floor(total_height / nozzle_height))+1):
         nodes_at_height = [node for node in all_nodes if node.height == h]
-        print("Nodes at nozzle height "+str(h)+": "+str(len(nodes_at_height)))
+        if debug: print("Nodes at nozzle height "+str(h)+": "+str(len(nodes_at_height)))
         if len(nodes_at_height) == 0: break
 
         # create a graph for this height chunk
@@ -121,11 +121,17 @@ def best_vertical_path(t, shape, curves, initial_offset=0.5):
             if node.data.min_sub_height == min_height:
                 weight = 0
                 if prev_node!=None:
-                    weight = rs.Distance(prev_node.data.sub_nodes[-1].center_point, node.data.sub_nodes[0].center_point)
+                    flat = [f for ff in node.data.sub_nodes[0].data for f in ff]
+                    if len(flat) > 1:
+                        closest_pnt_end = rs.PointClosestObject(prev_node.data.sub_nodes[-1].center_point, [f for ff in node.data.sub_nodes[0].data for f in ff])[1]
+                    elif len(flat) == 1:
+                        closest_pnt_end = rs.EvaluateCurve(flat[0], rs.CurveClosestPoint(flat[0], prev_node.data.sub_nodes[-1].center_point))
+                    else:
+                        print("That shouldn't be possible")
+                    weight = rs.Distance(prev_node.data.sub_nodes[-1].center_point, closest_pnt_end)
+
                 height_graph.starts.append((node, weight))
                 node.start = True
-
-        #print("starts", [(n[0].name, round(n[1], 2)) for n in height_graph.starts])
 
         # add edges to graph
         for graph_node in height_graph.nodes:
@@ -134,23 +140,29 @@ def best_vertical_path(t, shape, curves, initial_offset=0.5):
             for child in node1.children:
                 if child in nodes_at_height and child!=graph_node.data:
                     height_graph.add_edge(Graph_Edge(graph_node, height_graph.get_node(child), 0))
-                    arrow = rs.AddCurve([graph_node.data.sub_nodes[-1].center_point, child.sub_nodes[0].center_point])
-                    rs.CurveArrows(arrow, 2)
-                    edges.append(arrow)
+
+                    closest_pnt_end = rs.PointClosestObject(node1.sub_nodes[-1].center_point, [f for ff in child.sub_nodes[0].data for f in ff])[1]
+                    edges.append(rs.AddCurve([node1.sub_nodes[-1].center_point, closest_pnt_end]))
 
             # edges related to travel between nodes
             direct_relations = node1.get_all_descendants([]) + node1.get_all_ancestors([])
             siblings_and_counsins = [n for n in nodes_at_height if n not in direct_relations]
             for node2 in siblings_and_counsins:
-                # do not add edge if node1 overlaps node2
-                if  node2!=node1 and check_path(height_graph.get_node(node2), [graph_node]):
-                    # compute travel between curves, where weight is set as
-                    # distance between center of start and end curves within node
-                    weight = rs.Distance(node1.sub_nodes[-1].center_point, node2.sub_nodes[0].center_point)
-                    height_graph.add_edge(Graph_Edge(graph_node, height_graph.get_node(node2), weight))
-                    if weight!=0:
-                        arrow = rs.AddCurve([graph_node.data.sub_nodes[-1].center_point, node2.sub_nodes[0].center_point])
-                        edges.append(arrow)
+                if node2!=node1:
+                    if (node1.min_sub_height == node2.sub_nodes[-1].height+1):
+                        print("node 2 is directly below node 1")
+                        if is_sub_node_overlapping_above(node1.sub_nodes[0], node2.sub_nodes[-1], 0):
+                            print("technically a parent")
+                            height_graph.add_edge(Graph_Edge(graph_node, height_graph.get_node(node2), 0))
+                    elif check_path(height_graph.get_node(node2), [graph_node]):
+                        # only add edge if node1 does not overlap node2
+                        # compute travel between curves, where weight is set as distance between center of start and end curves within node
+                        closest_pnt_end = rs.PointClosestObject(node1.sub_nodes[-1].center_point, [f for ff in node2.sub_nodes[0].data for f in ff])[1]
+                        weight = rs.Distance(node1.sub_nodes[-1].center_point, closest_pnt_end)
+                        height_graph.add_edge(Graph_Edge(graph_node, height_graph.get_node(node2), weight))
+                        if weight!=0:
+                            edge = rs.AddCurve([node1.sub_nodes[-1].center_point, closest_pnt_end])
+                            edges.append(edge)
 
         height_graph.print_graph_data()
         height_graph.path_check = check_path
@@ -158,20 +170,23 @@ def best_vertical_path(t, shape, curves, initial_offset=0.5):
         start_time = time.time()
         path_section = height_graph.get_shortest_hamiltonian_path()[0]
         node_path = node_path + path_section
-        print("Hamiltonian Path Search Time: "+str(round(time.time() - start_time, 3))+" seconds")
-        print('')
+        if debug:
+            print("Hamiltonian Path Search Time: "+str(round(time.time() - start_time, 3))+" seconds")
+            print('')
 
     path = []
     for node in node_path:
         for sub in node.data.sub_nodes:
             path.append(sub.data)
 
-    print("Graph construction and all hamiltonian paths search time: "+str(round(time.time() - st_time, 3))+" seconds")
-    print("Total Vertical Path search time: "+str(round(time.time() - vert_start_time, 3))+" seconds")
+    if debug:
+        print("Graph construction and all hamiltonian paths search time: "+str(round(time.time() - st_time, 3))+" seconds")
+        print("Total Outer Travel Reduction time: "+str(round(time.time() - vert_start_time, 3))+" seconds")
+
     return vert_tree, node_path, path, edges
 
 
-def build_vertical_tree(t, shape, all_curves, initial_offset=0.5):
+def build_height_dependence_tree(t, shape, all_curves, initial_offset=0.5, debug=False):
     start_time = time.time()
 
     print('Number of layers: '+str(len(all_curves)))
@@ -181,9 +196,9 @@ def build_vertical_tree(t, shape, all_curves, initial_offset=0.5):
 
     time1 = 0
 
-    extrude_width = float(t.get_extrude_width())
-    initial_offset = extrude_width*initial_offset
-    gap = extrude_width*0.2
+    #extrude_width = float(t.get_extrude_width())
+    #initial_offset = extrude_width*initial_offset
+    #gap = extrude_width*0.2
 
     center_point = rs.CreatePoint(0, 0, 0)
     previous_nodes = [root]
@@ -191,8 +206,8 @@ def build_vertical_tree(t, shape, all_curves, initial_offset=0.5):
         st_1 = time.time()
         initial_curves = all_curves[l]
         curve_groups = get_curves(shape, rs.CurveStartPoint(initial_curves[0]).Z, initial_curves=initial_curves)
-        curve_groups = connect_curve_groups(curve_groups, gap, initial_offset=initial_offset)
-        curve_groups = [[crv] for crv in curve_groups]
+        #curve_groups = connect_curve_groups(curve_groups, gap, initial_offset=initial_offset)
+        #curve_groups = [[crv] for crv in curve_groups]
         time1 = time1 + time.time()-st_1
 
         outer_curves = []
@@ -257,15 +272,16 @@ def build_vertical_tree(t, shape, all_curves, initial_offset=0.5):
 
         previous_nodes = new_nodes
 
-    print('')
-    print("Time to get curves: "+str(round(time1, 3))+" seconds")
-    print('')
-    print("Initial treeing time: "+str(round(time.time() - start_time, 3))+" seconds")
-    print("Initial height tree size: "+str(len(root.get_all_nodes([]))))
+    if debug:
+        print('')
+        print("Time to get curves: "+str(round(time1, 3))+" seconds")
+        print('')
+        print("Initial treeing time: "+str(round(time.time() - start_time, 3))+" seconds")
+        print("Initial height tree size: "+str(len(root.get_all_nodes([]))))
 
     return root
 
-def segment_tree_by_height(t, tree, total_height, offset=0.0):
+def segment_tree_by_height(t, tree, total_height, offset=0.0, debug=False):
     limit = nozzle_height / t.get_layer_height()
     super_root = Node('root')
     super_root.name = 'root'
@@ -277,11 +293,11 @@ def segment_tree_by_height(t, tree, total_height, offset=0.0):
     for child in tree.children:
         group_by_height(child, super_root, limit, offset, idx=idx)
         idx = idx + 1
-    print("Grouping tree by nozzle height: "+str(round(time.time() - start_time, 3))+" seconds")
+    if debug: print("Grouping tree by nozzle height: "+str(round(time.time() - start_time, 3))+" seconds")
 
     s_t = time.time()
     divide_by_overlap(super_root, total_height, offset)
-    print("Dividing super tree by overlap: "+str(round(time.time() - s_t, 3))+" seconds")
+    if debug: print("Dividing super tree by overlap: "+str(round(time.time() - s_t, 3))+" seconds")
     return super_root
 
 

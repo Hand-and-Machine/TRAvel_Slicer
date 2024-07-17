@@ -202,9 +202,14 @@ def get_curve_groupings(curves):
                 if containment == 2:
                     inside[c][c2] = True
                     inside[c2][c] = False
-                else:
+                elif containment == 3:
                     inside[c][c2] = False
                     inside[c2][c] = True
+                elif containment == 0:
+                    inside[c][c2] = False
+                    inside[c2][c] = False
+                else:
+                    print("Regions should not be intersecting: ", containment, curves[c], curves[c2])
             else:
                 inside[c][c2] = False
                 inside[c2][c] = False
@@ -236,5 +241,5 @@ def get_curve_groupings(curves):
                     inner_curves.remove(c2)
 
     groups = [[c]+curve_groupings[c] for c in curve_groupings]
-    curves = [[curves[c] for c in g] for g in groups]
-    return curves
+    curve_groups = [[curves[c] for c in g] for g in groups]
+    return curve_groups

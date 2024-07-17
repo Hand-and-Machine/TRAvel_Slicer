@@ -27,7 +27,10 @@ def get_contours(curve, offset, walls=3, wall_mode=False):
             isocontours = isocontours + [crv]
             new_curves = get_isocontours(crv, offset, node, walls=walls, wall_mode=wall_mode)
             if new_curves:
-                isocontours = isocontours + new_curves #[crv for crv in new_curves if get_size(crv) > 1.5*offset]
+                for crv in new_curves:
+                    size = get_size(crv)
+                    if size>offset:
+                        isocontours.append(crv)
 
     contour_time = time.time()-all_contours_time
 
@@ -50,7 +53,7 @@ def get_isocontours(curve, offset, parent, wall_mode=False, walls=3):
         return curves
 
 
-def get_isocontour(curve, offset, reverse=False):
+def get_isocontour(curve, offset, reverse=False, fine_precision=False):
     if not curve:
         print("Error: get_isocontours not called with a curve", curve)
         return None
@@ -62,7 +65,8 @@ def get_isocontour(curve, offset, reverse=False):
             return None
 
     # get points and tangent vectors
-    dist = get_segment_distance(offset)
+    if fine_precision: dist = get_segment_distance(offset/3)
+    else: dist = get_segment_distance(offset)
     equi_pnts = [pnt for pnt in rs.DivideCurveEquidistant(curve, dist, True)]
     if len(equi_pnts) < 4:
         return None
@@ -93,7 +97,7 @@ def get_isocontour(curve, offset, reverse=False):
             tangent = rs.VectorSubtract(points[(i+1) % len(equi_pnts)][0], points[(i-1) % len(equi_pnts)][0])
 
         if round(tangent.X, 3)==0 and round(tangent.Y, 3)==0 and round(tangent.Z, 3)==0:
-            print("What the heck", tangent)
+            print("Unable to create tangent", tangent)
 
         # get vector orthogonal to tangent vector
         if orientation == 1:
@@ -207,11 +211,11 @@ def get_isocontour(curve, offset, reverse=False):
 
             # Transform point lists into curves
             curves = [rs.AddCurve(c) for c in curves if len(c) > 2]
-            curves = [crv for crv in curves if ((reverse and rs.CurveCurveIntersection(crv, curve)==None) or (not reverse and rs.PlanarClosedCurveContainment(crv, curve)==2)) and get_size(curve) > offset/2]
+            curves = [crv for crv in curves if ((reverse and rs.CurveCurveIntersection(crv, curve)==None) or (not reverse and rs.PlanarClosedCurveContainment(crv, curve)==2))]
             return curves
         else:
             curves = [rs.AddCurve(new_points + [new_points[0]])]
-            curves = [crv for crv in curves if ((reverse and rs.CurveCurveIntersection(crv, curve)==None) or (not reverse and rs.PlanarClosedCurveContainment(crv, curve)==2)) and get_size(curve) > offset/2]
+            curves = [crv for crv in curves if ((reverse and rs.CurveCurveIntersection(crv, curve)==None) or (not reverse and rs.PlanarClosedCurveContainment(crv, curve)==2))]
             return curves
     else:
         return None
@@ -241,25 +245,58 @@ def trim_curve(curve, offset, start_pnt):
 def connect_curve_groups(curve_groups, gap, initial_offset=0.0):
     connected_curves = []
     for crvs in curve_groups:
-        if initial_offset > 0: connect = get_isocontour(crvs[0], initial_offset)
-        else: connect = [crvs[0]]
-
-        for c in range(1, len(crvs)):
-            if initial_offset > 0: connect = connect + get_isocontour(crvs[c], initial_offset, reverse=True)
-            else: connect.append(crvs[c])
-
-        if all([rs.PlanarClosedCurveContainment(connect[c], connect[0])==2 for c in range(1, len(connect))]):
-            # All expanded hole curves are inside the contracted outer curve.
-            connected_curves.append(connect_curves(connect, gap))
+        outer = []
+        if initial_offset > 0:
+            outer = get_isocontour(crvs[0], initial_offset)
+            if outer == None or len(outer) == 0:
+                # retry with higher precision
+                print("Retrying with higher precision.")
+                outer = get_isocontour(crvs[0], initial_offset, fine_precision=True)
         else:
-            # Expanded hole curves are not all inside the contracted outer curve.
-            if all([rs.PlanarClosedCurveContainment(crvs[c], connect[0])==2 for c in range(1, len(crvs))]):
-                # All original hole curves are inside the contracted outer curve.
-                connected_curves.append(connect_curves(connect[0]+crvs[1:], gap))
+            outer = [crvs[0]]
+
+        holes = []
+        for c in range(1, len(crvs)):
+            if initial_offset > 0:
+                iso = get_isocontour(crvs[c], initial_offset, reverse=True)
+                holes = holes + iso
             else:
-                # Original hole curves are not all inside the contracted outer curve.
+                holes.append(crvs[c])
+
+        inside = []
+        for h in range(len(holes)):
+            for o in range(len(outer)):
+                if rs.PlanarClosedCurveContainment(holes[h], outer[o])==2:
+                    inside.append(True)
+                    break
+                inside.append(False)
+
+        if all(inside) or len(holes)==0:
+            # All expanded hole curves are inside the contracted outer curve(s).
+            connected_curves.append(connect_curves(outer+holes, gap))
+        else:
+            # Expanded hole curves are not all inside the contracted outer curve(s).
+            print("Expanded hole curves are not all inside the contracted outer curve(s).")
+            inside2 = []
+            for h in range(1, len(crvs)):
+                for o in range(len(outer)):
+                    if rs.PlanarClosedCurveContainment(crvs[h], outer[o])==2:
+                        inside2.append(True)
+                        break
+                    inside2.append(False)
+
+            if all(inside2):
+                # All original hole curves are inside the contracted outer curve(s).
+                connected_curves.append(connect_curves(outer+crvs[1:], gap))
+            else:
+                # Original hole curves are not all inside the contracted outer curve(s).
                 connected_curves.append(connect_curves(crvs, gap))
-    
+    length1 = 0
+    for crv in crvs:
+        if crv is not None and rs.IsCurve(crv):
+            length1 = length1 + rs.CurveLength(crv)
+        else:
+            print("Not a curve", crv)
     return connected_curves
 
 
@@ -348,6 +385,15 @@ def connect_curves(curves, offset):
         final_curve = rs.JoinCurves(all_curves)[0]
         node1.data = final_curve
         node2.data = final_curve
+
+    #length1 = 0
+    #print(curves)
+    #for crv in curves:
+        #print("Object", crv)
+        #print("Object type", rs.ObjectType(rs.coerceguid(crv)))
+        #length1 = length1 + rs.CurveLength(crv)
+
+    #print("Difference in length between connected curves: "+str(rs.CurveLength(final_curve)-length1))
 
     return final_curve
 
