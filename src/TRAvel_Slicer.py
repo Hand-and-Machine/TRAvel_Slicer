@@ -715,26 +715,28 @@ def fill_curve_with_contours(t, curve, start_pnt=None, wall_mode=False, walls=3)
     # Generate isocontours
     root, isocontours, contour_time = get_contours(curve, extrude_width, walls=walls, wall_mode=wall_mode)
 
-    isocontours = [rs.DivideCurve(i, int(rs.CurveLength(i)/t.get_resolution())) for i in isocontours]
+    return isocontours
 
-    travel_paths = []
-    start_idx = 0
-    for i in range(len(isocontours)):
-        points = isocontours[i]
-        start_idx, d = closest_point(start_pnt, points)
-        if start_idx == None: start_idx = 0
+    #isocontours = [rs.DivideCurve(i, int(rs.CurveLength(i)/t.get_resolution())) for i in isocontours]
 
-        travel_paths = travel_paths + [rs.AddCurve([t.get_position(), points[start_idx]])]
-        t.pen_up()
-        t.set_position(points[start_idx].X, points[start_idx].Y, t.get_position().Z)
-        t.set_position(points[start_idx].X, points[start_idx].Y, points[start_idx].Z)
-        t.pen_down()
+    #travel_paths = []
+    #start_idx = 0
+    #for i in range(len(isocontours)):
+    #    points = isocontours[i]
+    #    start_idx, d = closest_point(start_pnt, points)
+    #    if start_idx == None: start_idx = 0
 
-        for p in (range(start_idx+1, len(points)) + range(0, start_idx)):
-            t.set_position(points[p].X, points[p].Y, points[p].Z)
-        t.set_position(points[start_idx].X, points[start_idx].Y, points[start_idx].Z)
+    #    travel_paths = travel_paths + [rs.AddCurve([t.get_position(), points[start_idx]])]
+    #    t.pen_up()
+    #    t.set_position(points[start_idx].X, points[start_idx].Y, t.get_position().Z)
+    #    t.set_position(points[start_idx].X, points[start_idx].Y, points[start_idx].Z)
+    #    t.pen_down()
 
-    return travel_paths
+    #    for p in (range(start_idx+1, len(points)) + range(0, start_idx)):
+    #        t.set_position(points[p].X, points[p].Y, points[p].Z)
+    #    t.set_position(points[start_idx].X, points[start_idx].Y, points[start_idx].Z)
+
+    #return travel_paths
 
 
 def slice_fermat_fill(t, shape, start_pnt=None, start=0, end=None, wall_mode=False, walls=3, fill_bottom=False, bottom_layers=3, initial_offset=0.5):
@@ -826,7 +828,7 @@ def TRAvel_Slice(t, shape, all_curves, wall_mode=False, walls=3, fill_bottom=Fal
     fermat_time = 0
 
     start_point = t.get_position()
-    extrude_width = t.get_extrude_width()
+    extrude_width = float(t.get_extrude_width())
     gap = 0.2*extrude_width
     boxes = []
     move_up = False
@@ -838,7 +840,7 @@ def TRAvel_Slice(t, shape, all_curves, wall_mode=False, walls=3, fill_bottom=Fal
 
         for node in node_path[s].data.sub_nodes:
             start_point = t.get_position()
-            curves = connect_curve_groups(node.data, gap, initial_offset=initial_offset)
+            curves = connect_curve_groups(node.data, gap, initial_offset=initial_offset*extrude_width)
             for curve in curves:
                 if not wall_mode or (wall_mode and fill_bottom and node.height<bottom_layers):
                     outer_travel, inner_travel, start_point, c_time, f_time = fill_curve_with_fermat_spiral(t, curve, bboxes=boxes, move_up=move_up, start_pnt=start_point, spiral_seam=spiral_seam)
