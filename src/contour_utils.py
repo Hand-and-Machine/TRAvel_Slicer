@@ -12,7 +12,7 @@ from Node import *
 import geometry_utils
 from geometry_utils import *
 
-def get_contours(curve, offset, walls=3, wall_mode=False):
+def get_contours(curve, offset, walls=3, wall_mode=False, separate_wall=True):
     all_contours_time = time.time()
 
     first_contours = [curve]
@@ -20,6 +20,10 @@ def get_contours(curve, offset, walls=3, wall_mode=False):
     root = Node("root")
     root.depth = -1
     isocontours = []
+
+    if not separate_wall:
+        root.data = curve
+
     if first_contours != None:
         for crv in first_contours:
             node = root.add_child(crv)

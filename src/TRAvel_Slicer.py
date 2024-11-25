@@ -46,7 +46,7 @@ def draw_points(t, points, start_idx=0, bboxes=[], move_up=True, spiral_seam=Fal
 
             t.set_speed(9000)
 
-        if move_up and rs.Distance(pos, points[start_idx]) > max(nozzle_width, 2*layer_height):
+        if move_up and rs.Distance(pos, points[start_idx]) > max(extrude_width, max(nozzle_width, 3*layer_height)):
             z_lift = 2*layer_height
             higher_z = max(pos.Z, points[start_idx].Z)+z_lift
             # go up layer_height*2, go to start position of next start + layer_height*2
@@ -581,12 +581,12 @@ def get_connection_indices(node, offset):
     return start_index, end_index
 
 
-def fill_curve_with_fermat_spiral(t, curve, bboxes=[], move_up=True, start_pnt=None, wall_mode=False, walls=3, wall_first=False, spiral_seam=False):
+def fill_curve_with_fermat_spiral(t, curve, bboxes=[], move_up=True, start_pnt=None, wall_mode=False, walls=3, wall_first=False, spiral_seam=False, separate_wall=True):
     extrude_width = float(t.get_extrude_width())
 
     # slice the shape
     # Generate isocontours
-    root, isocontours, contour_time = get_contours(curve, extrude_width, walls=walls, wall_mode=wall_mode)
+    root, isocontours, contour_time = get_contours(curve, extrude_width, walls=walls, wall_mode=wall_mode, separate_wall=separate_wall)
 
     st_time = time.time()
 
@@ -597,65 +597,95 @@ def fill_curve_with_fermat_spiral(t, curve, bboxes=[], move_up=True, start_pnt=N
     start_point = start_pnt
 
     # Spiralling Regions
-    # if generating the first isocontour resulted in multiple
-    # regions, we have to handle them separately
-    for node in root.children:
-        # there may be multiple inner regions within the outermost wall due to initial_offset
-        inner_regions = []
-        for child in node.children:
-            region_tree = segment_tree(child)
-            all_nodes = region_tree.get_all_nodes([])
-            for n in all_nodes:
-                start_point = rs.EvaluateCurve(n.sub_nodes[0], rs.CurveClosestPoint(n.sub_nodes[0], start_pnt))
-                if len(n.sub_nodes) > 1:
-                    num_pnts = get_num_points(n.sub_nodes[0], extrude_width)
-                    if n.type == 1:
-                        if n.parent:
-                            #start_point = get_corner(n.sub_nodes[0], n.sub_nodes[-1], extrude_width)
-                            start_point = rs.CurveClosestObject(n.sub_nodes[0], n.sub_nodes[-1])[1]
-                        n.fermat_spiral = fermat_spiral(n.sub_nodes, start_point, extrude_width)
-                    elif n.type == 2:
-                        n.fermat_spiral = rs.DivideCurve(n.sub_nodes[0], num_pnts)
-                elif len(n.sub_nodes) == 1:
-                    num_pnts = get_num_points(n.sub_nodes[0], extrude_width)
-                    #n.fermat_spiral = rs.DivideCurve(trim_curve(n.sub_nodes[0], extrude_width*0.25, start_point), num_pnts)
-                    n.fermat_spiral = rs.DivideCurve(n.sub_nodes[0], num_pnts)
-                else:
-                    print("Error: node with no curves in it at all", n)
+    if separate_wall:
+        # if generating the first isocontour resulted in multiple
+        # regions, we have to handle them separately
+        for node in root.children:
+            # there may be multiple inner regions within the outermost wall due to initial_offset
+            inner_regions = []
+            for child in node.children:
+                region_tree = segment_tree(child)
+                all_nodes = region_tree.get_all_nodes([])
+                for n in all_nodes:
+                    start_point = rs.EvaluateCurve(n.sub_nodes[0], rs.CurveClosestPoint(n.sub_nodes[0], start_pnt))
+                    if len(n.sub_nodes) > 1:
+                        num_pnts = get_num_points(n.sub_nodes[0], extrude_width)
+                        if n.type == 1:
+                            if n.parent:
+                                start_point = get_corner(n.sub_nodes[0], n.sub_nodes[-1], extrude_width)
+                                #start_point = rs.CurveClosestObject(n.sub_nodes[0], n.sub_nodes[-1])[1]
+                            n.fermat_spiral = fermat_spiral(n.sub_nodes, start_point, extrude_width)
+                        elif n.type == 2:
+                            n.fermat_spiral = rs.DivideCurve(n.sub_nodes[0], num_pnts)
+                    elif len(n.sub_nodes) == 1:
+                        num_pnts = get_num_points(n.sub_nodes[0], extrude_width)
+                        n.fermat_spiral = rs.DivideCurve(trim_curve(n.sub_nodes[0], extrude_width*0.25, start_point), num_pnts)
+                        #n.fermat_spiral = rs.DivideCurve(n.sub_nodes[0], num_pnts)
+                    else:
+                        print("Error: node with no curves in it at all", n)
 
-            if len(all_nodes) > 1:
-                inner_regions.append(connect_spiralled_nodes(region_tree, extrude_width))
-            elif len(all_nodes) == 1:
-                inner_regions.append(all_nodes[0].fermat_spiral)
+                if len(all_nodes) > 1:
+                    inner_regions.append(connect_spiralled_nodes(region_tree, extrude_width))
+                elif len(all_nodes) == 1:
+                    inner_regions.append(all_nodes[0].fermat_spiral)
 
-        amt = 1.0
-        if t.get_printer() == 'ender': amt = 3.0
+            #amt = 1.0
+            #if t.get_printer() == 'ender': amt = 3.0
 
-        start_point = rs.EvaluateCurve(curve, rs.CurveClosestPoint(curve, start_pnt))
-        outer_wall = trim_curve(node.data, extrude_width*0.5, start_point)
+            start_point = rs.EvaluateCurve(curve, rs.CurveClosestPoint(curve, start_pnt))
+            outer_wall = trim_curve(node.data, extrude_width*0.5, start_point)
 
-        outer_points = rs.PolylineVertices(rs.ConvertCurveToPolyline(outer_wall, min_edge_length=t.get_resolution()))
+            outer_points = rs.PolylineVertices(rs.ConvertCurveToPolyline(outer_wall, min_edge_length=t.get_resolution()))
 
-        if wall_first:
-            outer_travel_paths = outer_travel_paths + draw_points(t, outer_points, 0, bboxes=bboxes, move_up=move_up, spiral_seam=spiral_seam)
-            final_spiral = final_spiral + outer_points
-        for region in inner_regions:
-            region_curve = rs.AddCurve(region)
-            region_points = rs.PolylineVertices(rs.ConvertCurveToPolyline(region_curve, min_edge_length=t.get_resolution()))
-            if region_points==None: region_points = region
-            travel_paths = draw_points(t, region_points, 0, bboxes=bboxes, move_up=move_up, spiral_seam=False)
             if wall_first:
-                inner_travel_paths = inner_travel_paths + travel_paths
+                outer_travel_paths = outer_travel_paths + draw_points(t, outer_points, 0, bboxes=bboxes, move_up=move_up, spiral_seam=spiral_seam)
+                final_spiral = final_spiral + outer_points
+            for region in inner_regions:
+                region_curve = rs.AddCurve(region)
+                region_points = rs.PolylineVertices(rs.ConvertCurveToPolyline(region_curve, min_edge_length=t.get_resolution()))
+                if region_points==None: region_points = region
+                travel_paths = draw_points(t, region_points, 0, bboxes=bboxes, move_up=move_up, spiral_seam=False)
+                if wall_first:
+                    inner_travel_paths = inner_travel_paths + travel_paths
+                else:
+                    outer_travel_paths = outer_travel_paths + travel_paths
+                final_spiral = final_spiral + region_points
+            if not wall_first:
+                travel_paths = draw_points(t, outer_points, 0, bboxes=bboxes, move_up=move_up, spiral_seam=spiral_seam)
+                if len(inner_regions) > 0:
+                    inner_travel_paths = inner_travel_paths + travel_paths
+                else:
+                    outer_travel_paths = outer_travel_paths + travel_paths
+                final_spiral = final_spiral + outer_points
+    else:
+        region_tree = segment_tree(root)
+        all_nodes = region_tree.get_all_nodes([])
+        for n in all_nodes:
+            start_point = rs.EvaluateCurve(n.sub_nodes[0], rs.CurveClosestPoint(n.sub_nodes[0], start_pnt))
+            if len(n.sub_nodes) > 1:
+                num_pnts = get_num_points(n.sub_nodes[0], extrude_width)
+                if n.type == 1:
+                    if n.parent:
+                        start_point = get_corner(n.sub_nodes[0], n.sub_nodes[-1], extrude_width)
+                    n.fermat_spiral = fermat_spiral(n.sub_nodes, start_point, extrude_width)
+                elif n.type == 2:
+                    n.fermat_spiral = rs.DivideCurve(n.sub_nodes[0], num_pnts)
+            elif len(n.sub_nodes) == 1:
+                num_pnts = get_num_points(n.sub_nodes[0], extrude_width)
+                n.fermat_spiral = rs.DivideCurve(trim_curve(n.sub_nodes[0], extrude_width*0.25, start_point), num_pnts)
             else:
-                outer_travel_paths = outer_travel_paths + travel_paths
-            final_spiral = final_spiral + region_points
-        if not wall_first:
-            travel_paths = draw_points(t, outer_points, 0, bboxes=bboxes, move_up=move_up, spiral_seam=spiral_seam)
-            if len(inner_regions) > 0:
-                inner_travel_paths = inner_travel_paths + travel_paths
-            else:
-                outer_travel_paths = outer_travel_paths + travel_paths
-            final_spiral = final_spiral + outer_points
+                print("Error: node with no curves in it at all", n)
+
+        if len(all_nodes) > 1:
+            region = connect_spiralled_nodes(region_tree, extrude_width)
+        elif len(all_nodes) == 1:
+            region = all_nodes[0].fermat_spiral
+        
+        region_curve = rs.AddCurve(region)
+        region_points = rs.PolylineVertices(rs.ConvertCurveToPolyline(region_curve, min_edge_length=t.get_resolution()))
+        if region_points==None: region_points = region
+        outer_travel_paths = draw_points(t, region_points, 0, bboxes=bboxes, move_up=move_up, spiral_seam=False)
+        final_spiral = final_spiral + region_points
 
     fermat_time = time.time() - st_time
 
@@ -815,12 +845,12 @@ def slice_contour_fill(t, shape, start=0, end=None, wall_mode=False, walls=3, fi
     return travel_paths
 
 
-def TRAvel_Slice(t, shape, all_curves, wall_mode=False, walls=3, fill_bottom=False, bottom_layers=3, initial_offset=0.5, spiral_seam=False, debug=False):
+def TRAvel_Slice(t, shape, all_curves, wall_mode=False, walls=3, fill_bottom=False, bottom_layers=3, initial_offset=0.5, spiral_seam=False, separate_wall=True, debug=False):
     overall_start_time = time.time()
 
     inner_travel_paths = []
     outer_travel_paths = []
-    #tree, node_path, path, edges = best_vertical_path(t, shape, all_curves, initial_offset=initial_offset)
+
     #node_path, path = outer_travel_reduction(t, shape, all_curves, initial_offset=initial_offset)
     tree, node_path, path, edges = outer_travel_reduction(t, shape, all_curves, initial_offset=initial_offset, debug=debug)
 
@@ -843,13 +873,13 @@ def TRAvel_Slice(t, shape, all_curves, wall_mode=False, walls=3, fill_bottom=Fal
             curves = connect_curve_groups(node.data, gap, initial_offset=initial_offset*extrude_width)
             for curve in curves:
                 if not wall_mode or (wall_mode and fill_bottom and node.height<bottom_layers):
-                    outer_travel, inner_travel, start_point, c_time, f_time = fill_curve_with_fermat_spiral(t, curve, bboxes=boxes, move_up=move_up, start_pnt=start_point, spiral_seam=spiral_seam)
+                    outer_travel, inner_travel, start_point, c_time, f_time = fill_curve_with_fermat_spiral(t, curve, bboxes=boxes, move_up=move_up, start_pnt=start_point, spiral_seam=spiral_seam, separate_wall=separate_wall)
                     outer_travel_paths = outer_travel_paths + outer_travel
                     inner_travel_paths = inner_travel_paths + inner_travel
                     contour_time = contour_time + c_time
                     fermat_time = fermat_time + f_time
                 else:
-                    outer_travel, inner_travel, start_point, c_time, f_time = fill_curve_with_fermat_spiral(t, curve, bboxes=boxes, move_up=move_up, start_pnt=start_point, wall_mode=wall_mode, walls=walls, spiral_seam=spiral_seam)
+                    outer_travel, inner_travel, start_point, c_time, f_time = fill_curve_with_fermat_spiral(t, curve, bboxes=boxes, move_up=move_up, start_pnt=start_point, wall_mode=wall_mode, walls=walls, spiral_seam=spiral_seam, separate_wall=separate_wall)
                     outer_travel_paths = outer_travel_paths + outer_travel
                     inner_travel_paths = inner_travel_paths + inner_travel
                     contour_time = contour_time + c_time

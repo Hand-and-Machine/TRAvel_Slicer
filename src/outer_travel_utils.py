@@ -150,9 +150,7 @@ def outer_travel_reduction(t, shape, curves, initial_offset=0.5, debug=False):
             for node2 in siblings_and_counsins:
                 if node2!=node1:
                     if (node1.min_sub_height == node2.sub_nodes[-1].height+1):
-                        print("node 2 is directly below node 1")
                         if is_sub_node_overlapping_above(node1.sub_nodes[0], node2.sub_nodes[-1], 0):
-                            print("technically a parent")
                             height_graph.add_edge(Graph_Edge(graph_node, height_graph.get_node(node2), 0))
                     elif check_path(height_graph.get_node(node2), [graph_node]):
                         # only add edge if node1 does not overlap node2

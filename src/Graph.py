@@ -10,7 +10,7 @@ class Graph:
 
         self.count = 0
         self.start_time = 0
-        self.search_limit = 15
+        self.search_limit = 30
         self.print_exceeded = True
 
         self.path = None
