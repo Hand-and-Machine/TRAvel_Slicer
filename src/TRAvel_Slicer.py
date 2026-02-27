@@ -89,7 +89,7 @@ def draw_points(t, points, start_idx=0, bboxes=[], move_up=True, spiral_seam=Fal
 
         t.pen_down()
 
-        indices = range(start_idx, len(points)) + range(0, start_idx)
+        indices = list(range(start_idx, len(points))) + list(range(0, start_idx))
         for p in indices:
             t.set_position(points[p].X, points[p].Y, points[p].Z)
             if points[p].Z > max_z: max_z = points[p].Z
@@ -310,8 +310,12 @@ def fermat_spiral(contours, start_pnt, offset):
         ll_prime = rs.CurveClosestPoint(isocontours[i+1], ll_pnt+rs.VectorSubtract(l_prime_pnt, l_pnt))
         ll_prime_pnt = rs.EvaluateCurve(isocontours[i+1], ll_prime)
 
-        joining_curves.append(rs.AddCurve([l_pnt, l_prime_pnt]))
-        joining_curves.append(rs.AddCurve([ll_pnt, ll_prime_pnt]))
+        try:
+            joining_curves.append(rs.AddCurve([l_pnt, l_prime_pnt]))
+            joining_curves.append(rs.AddCurve([ll_pnt, ll_prime_pnt]))
+        except Exception as e:
+            print("tried to join and add curve")
+            print(e)
 
         start = l_prime_pnt
         start_param = l_prime
@@ -322,9 +326,13 @@ def fermat_spiral(contours, start_pnt, offset):
         trims.append([l, start_param])
 
     for i in range(len(isocontours)):
-        if trims[i][0] < 0.0000001: trims[i][0] = 0.0
-        if trims[i][1] < 0.0000001: trims[i][1] = 0.0
-        isocontours[i] = rs.TrimCurve(isocontours[i], trims[i], delete_input=False)
+        try:
+            if trims[i][0] < 0.0000001: trims[i][0] = 0.0
+            if trims[i][1] < 0.0000001: trims[i][1] = 0.0
+            isocontours[i] = rs.TrimCurve(isocontours[i], trims[i], delete_input=False)
+        except Exception as e:
+            print("tried to trim curve")
+            print(e)
 
     spiraled_curve = rs.JoinCurves(isocontours+joining_curves, tolerance=offset/2.)
     if len(spiraled_curve) > 1:
@@ -857,6 +865,8 @@ def TRAvel_Slice(t, shape, all_curves, wall_mode=False, walls=3, fill_bottom=Fal
     contour_time = 0
     fermat_time = 0
 
+    connected_curves = []
+
     start_point = t.get_position()
     extrude_width = float(t.get_extrude_width())
     gap = 0.2*extrude_width
@@ -870,7 +880,9 @@ def TRAvel_Slice(t, shape, all_curves, wall_mode=False, walls=3, fill_bottom=Fal
 
         for node in node_path[s].data.sub_nodes:
             start_point = t.get_position()
+            # connect inner and outer curves (finds holes)
             curves = connect_curve_groups(node.data, gap, initial_offset=initial_offset*extrude_width)
+            connected_curves = connected_curves + curves
             for curve in curves:
                 if not wall_mode or (wall_mode and fill_bottom and node.height<bottom_layers):
                     outer_travel, inner_travel, start_point, c_time, f_time = fill_curve_with_fermat_spiral(t, curve, bboxes=boxes, move_up=move_up, start_pnt=start_point, spiral_seam=spiral_seam, separate_wall=separate_wall)
@@ -892,4 +904,4 @@ def TRAvel_Slice(t, shape, all_curves, wall_mode=False, walls=3, fill_bottom=Fal
         print("Fermat Spiraling time: "+str(round(fermat_time, 3))+" seconds")
         print("Full path generation: "+str(round(time.time()-overall_start_time, 3))+" seconds")
 
-    return outer_travel_paths, inner_travel_paths, tree, node_path, path, edges
+    return outer_travel_paths, inner_travel_paths, tree, node_path, path, edges, connected_curves

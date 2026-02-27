@@ -9,6 +9,10 @@ from Graph import *
 import Node
 from Node import *
 
+import ExtruderTurtle as e
+import slicer_utilities as su
+from extruder_turtle import *
+
 import geometry_utils
 from geometry_utils import *
 
@@ -44,6 +48,7 @@ def get_contours(curve, offset, walls=3, wall_mode=False, separate_wall=True):
 def get_isocontours(curve, offset, parent, wall_mode=False, walls=3):
     new_curves = get_isocontour(curve, offset)
     if not new_curves:
+        print("no new curves. returning empty list")
         return []
     else:
         curves = [] + new_curves
@@ -55,6 +60,7 @@ def get_isocontours(curve, offset, parent, wall_mode=False, walls=3):
                 for nc in new_new_curves:
                     curves.append(nc)
         return curves
+
 
 
 def get_isocontour(curve, offset, reverse=False, fine_precision=False):
@@ -73,6 +79,7 @@ def get_isocontour(curve, offset, reverse=False, fine_precision=False):
     else: dist = get_segment_distance(offset)
     equi_pnts = [pnt for pnt in rs.DivideCurveEquidistant(curve, dist, True)]
     if len(equi_pnts) < 4:
+        print("Points less than 4 problem.")
         return None
 
     points = [(equi_pnts[p], rs.VectorSubtract(equi_pnts[(p+1) % len(equi_pnts)], equi_pnts[(p-1) % len(equi_pnts)])) for p in range(len(equi_pnts))]
@@ -136,6 +143,7 @@ def get_isocontour(curve, offset, reverse=False, fine_precision=False):
     if new_points_exist:
         # if any points have been discarded
         if discarded_points_exist:
+            print(discarded_points)
             # get list of lists of all sequential indices
             init_sequences = [[]]
             start_index = next((index for index, value in enumerate(new_points) if value != None and new_points[index-1] == None), -1)
@@ -150,13 +158,19 @@ def get_isocontour(curve, offset, reverse=False, fine_precision=False):
 
             # verify that broken pieces of curve are inside or outside of parent contour
             sequences = []
+            print("init_sequences length: " +str(len(init_sequences)))
+            print(init_sequences)
             for seq in init_sequences:
                 if len(seq) > 1 and ((reverse and rs.CurveCurveIntersection(rs.AddCurve([new_points[idx] for idx in seq]), curve)==None and rs.PointInPlanarClosedCurve(new_points[seq[0]], curve)==0) or (not reverse and rs.PlanarClosedCurveContainment(rs.AddCurve([new_points[idx] for idx in seq+seq[-2:0:-1]+[seq[0]]]), curve)==2)):
                     sequences.append(seq)
                 elif len(seq) == 1 and ((reverse and rs.PointInPlanarClosedCurve(new_points[seq[0]], curve)==0) or (not reverse and rs.PointInPlanarClosedCurve(new_points[seq[0]], curve)==1)):
                     sequences.append(seq)
+                else:
+                    print("seq length: " +str(len(seq)))
+                    print("sequences length: " +str(len(sequences)))
 
             if len(sequences) == 0:
+                print("Length of sequences is 0. Returning none")
                 return None
 
             # get start and end points of all sequences
@@ -222,6 +236,7 @@ def get_isocontour(curve, offset, reverse=False, fine_precision=False):
             curves = [crv for crv in curves if ((reverse and rs.CurveCurveIntersection(crv, curve)==None) or (not reverse and rs.PlanarClosedCurveContainment(crv, curve)==2))]
             return curves
     else:
+        print("Returning none at end of isocontours")
         return None
 
 
@@ -377,7 +392,7 @@ def connect_curves(curves, offset):
 
         crv1 = rs.AddCurve([pnt1_1, pnt2_1])
         crv2 = rs.AddCurve([pnt1_2, pnt2_2])
-        intersect = rs.PlanarCurveCollision(crv1, crv2)
+        intersect = rs.PlanarCurveCollision(crv1, crv2,tolerance=offset/2.0)
 
         if not intersect:
             all_curves.append(crv1)
@@ -446,15 +461,26 @@ def split_curve_at(curve, points, tolerance=0):
 def split_curve(curve, split_point, tolerance):
     split_circ = rs.AddCircle(split_point, tolerance/2)
     intersections = rs.CurveCurveIntersection(curve, split_circ)
-
     split_curves = [curve]
     if intersections!=None and len(intersections)>1:
-        split_curves = rs.TrimCurve(curve, [intersections[1][5], intersections[0][5]])
+        try:
+            # generate both possible trimmed curves and use the longer one. a bit of a hack, but usually right
+            split_curves1 = rs.TrimCurve(curve, [intersections[1][5], intersections[0][5]], delete_input=False)
+            split_curves2 = rs.TrimCurve(curve, [intersections[0][5], intersections[1][5]], delete_input=False)
+            l1 = rs.CurveLength(split_curves1)
+            l2 = rs.CurveLength(split_curves2)
+            if (l1>l2):
+                split_curves = split_curves1
+            else:
+                split_curves = split_curves2
+        except Exception as e:
+            print(e)
+            split_curves = split_curves1
         if type(split_curves) != list:
             split_curves = [split_curves]
     else:
         print("Error: Unable to split curve at point.")
-    
+
     return split_curves, [intersections[0][1], intersections[1][1]]
 
 
