@@ -10,7 +10,7 @@ import Node
 from Node import *
 
 import ExtruderTurtle as e
-import slicer_utilities as su
+#import slicer_utilities as su
 from extruder_turtle import *
 
 import geometry_utils
@@ -28,7 +28,7 @@ def get_contours(curve, offset, walls=3, wall_mode=False, separate_wall=True):
     if not separate_wall:
         root.data = curve
 
-    if first_contours != None:
+    if first_contours is not None:
         for crv in first_contours:
             node = root.add_child(crv)
             node.is_wall = True
@@ -143,34 +143,27 @@ def get_isocontour(curve, offset, reverse=False, fine_precision=False):
     if new_points_exist:
         # if any points have been discarded
         if discarded_points_exist:
-            print(discarded_points)
             # get list of lists of all sequential indices
             init_sequences = [[]]
-            start_index = next((index for index, value in enumerate(new_points) if value != None and new_points[index-1] == None), -1)
+            start_index = next((index for index, value in enumerate(new_points) if value is not None and new_points[index-1] == None), -1)
             if start_index !=- 1:
-                indices = range(start_index, len(new_points)) + range(0, start_index)
+                indices = list(range(start_index, len(new_points))) + list(range(0, start_index))
                 for i in indices:
                     next_i = (i+1)%len(new_points)
-                    if new_points[i] != None:
+                    if new_points[i] is not None:
                         init_sequences[-1].append(i)
-                    elif new_points[next_i] != None and next_i != start_index:
+                    elif new_points[next_i] is not None and next_i != start_index:
                         init_sequences.append([])
 
             # verify that broken pieces of curve are inside or outside of parent contour
             sequences = []
-            print("init_sequences length: " +str(len(init_sequences)))
-            print(init_sequences)
             for seq in init_sequences:
                 if len(seq) > 1 and ((reverse and rs.CurveCurveIntersection(rs.AddCurve([new_points[idx] for idx in seq]), curve)==None and rs.PointInPlanarClosedCurve(new_points[seq[0]], curve)==0) or (not reverse and rs.PlanarClosedCurveContainment(rs.AddCurve([new_points[idx] for idx in seq+seq[-2:0:-1]+[seq[0]]]), curve)==2)):
                     sequences.append(seq)
                 elif len(seq) == 1 and ((reverse and rs.PointInPlanarClosedCurve(new_points[seq[0]], curve)==0) or (not reverse and rs.PointInPlanarClosedCurve(new_points[seq[0]], curve)==1)):
                     sequences.append(seq)
-                else:
-                    print("seq length: " +str(len(seq)))
-                    print("sequences length: " +str(len(sequences)))
 
             if len(sequences) == 0:
-                print("Length of sequences is 0. Returning none")
                 return None
 
             # get start and end points of all sequences
@@ -236,7 +229,6 @@ def get_isocontour(curve, offset, reverse=False, fine_precision=False):
             curves = [crv for crv in curves if ((reverse and rs.CurveCurveIntersection(crv, curve)==None) or (not reverse and rs.PlanarClosedCurveContainment(crv, curve)==2))]
             return curves
     else:
-        print("Returning none at end of isocontours")
         return None
 
 
