@@ -24,7 +24,7 @@ def get_contours(curve, offset, walls=3, wall_mode=False, separate_wall=True):
     if not separate_wall:
         root.data = curve
 
-    if first_contours != None:
+    if first_contours is not None:
         for crv in first_contours:
             node = root.add_child(crv)
             node.is_wall = True
@@ -138,14 +138,14 @@ def get_isocontour(curve, offset, reverse=False, fine_precision=False):
         if discarded_points_exist:
             # get list of lists of all sequential indices
             init_sequences = [[]]
-            start_index = next((index for index, value in enumerate(new_points) if value != None and new_points[index-1] == None), -1)
+            start_index = next((index for index, value in enumerate(new_points) if value is not None and new_points[index-1] == None), -1)
             if start_index !=- 1:
                 indices = range(start_index, len(new_points)) + range(0, start_index)
                 for i in indices:
                     next_i = (i+1)%len(new_points)
-                    if new_points[i] != None:
+                    if new_points[i] is not None:
                         init_sequences[-1].append(i)
-                    elif new_points[next_i] != None and next_i != start_index:
+                    elif new_points[next_i] is not None and next_i != start_index:
                         init_sequences.append([])
 
             # verify that broken pieces of curve are inside or outside of parent contour
@@ -448,7 +448,7 @@ def split_curve(curve, split_point, tolerance):
     intersections = rs.CurveCurveIntersection(curve, split_circ)
 
     split_curves = [curve]
-    if intersections!=None and len(intersections)>1:
+    if intersections is not None and len(intersections)>1:
         split_curves = rs.TrimCurve(curve, [intersections[1][5], intersections[0][5]])
         if type(split_curves) != list:
             split_curves = [split_curves]
@@ -462,13 +462,13 @@ def get_corners(curve, resolution=None):
     corners = []
     if rs.IsPolyline(curve):
         poly = curve
-    elif resolution!=None and resolution>0:
+    elif resolution is not None and resolution>0:
         poly = rs.ConvertCurveToPolyline(curve, min_edge_length=resolution/4)
     else: poly = rs.ConvertCurveToPolyline(curve)
 
     for pnt in rs.PolylineVertices(poly):
         curv = rs.CurveCurvature(curve, rs.CurveClosestPoint(curve, pnt))
-        if curv!=None and curv[3]<0.5:
+        if curv is not None and curv[3]<0.5:
             corners.append(pnt)
 
     return corners
