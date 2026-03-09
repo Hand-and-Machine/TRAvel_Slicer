@@ -120,7 +120,7 @@ def outer_travel_reduction(t, shape, curves, initial_offset=0.5, debug=False):
         for node in height_graph.nodes:
             if node.data.min_sub_height == min_height:
                 weight = 0
-                if prev_node!=None:
+                if prev_node is not None:
                     flat = [f for ff in node.data.sub_nodes[0].data for f in ff]
                     if len(flat) > 1:
                         closest_pnt_end = rs.PointClosestObject(prev_node.data.sub_nodes[-1].center_point, [f for ff in node.data.sub_nodes[0].data for f in ff])[1]
@@ -443,7 +443,7 @@ def split_super_node_at_height(node, height):
 
 
 def union_curves(curves):
-    if curves!=None:
+    if curves is not None:
         if len(curves) > 1:
             try:
                 return rs.CurveBooleanUnion([curve for curve in curves if rs.IsCurve(curve) and rs.IsCurveClosed(curve)])
@@ -452,13 +452,13 @@ def union_curves(curves):
                     print(curve, rs.ObjectType(curve))
                 raise ValueError(err)
         elif len(curves) == 1:
-            return [curve for curve in curves if curve!=None and rs.IsCurve(curve) and rs.IsCurveClosed(curve)]
+            return [curve for curve in curves if curve is not None and rs.IsCurve(curve) and rs.IsCurveClosed(curve)]
         else:
             raise ValueError("Called union_curves with no curves")
 
 
 def union_curves_on_xy_plane(curves):
-    if curves!=None:
+    if curves is not None:
         if len(curves) > 1:
             try:
                 return rs.CurveBooleanUnion([rs.CopyObject(curve, [0, 0, -rs.CurveStartPoint(curve).Z]) for curve in curves if rs.IsCurve(curve) and rs.IsCurveClosed(curve)])
@@ -467,7 +467,7 @@ def union_curves_on_xy_plane(curves):
                     print(curve, rs.ObjectType(curve))
                 raise ValueError(err)
         elif len(curves) == 1:
-            return [rs.CopyObject(curve, [0, 0, -rs.CurveStartPoint(curve).Z]) for curve in curves if curve!=None and rs.IsCurve(curve) and rs.IsCurveClosed(curve)]
+            return [rs.CopyObject(curve, [0, 0, -rs.CurveStartPoint(curve).Z]) for curve in curves if curve is not None and rs.IsCurve(curve) and rs.IsCurveClosed(curve)]
         else:
             raise ValueError("Called union_curves_on_xy_plane with no curves")
 
@@ -476,11 +476,11 @@ def layer_overlap_check(sub1, sub2, width):
     if xy_plane_crvs.get(sub1) == None:
         xy_plane_crvs[sub1] = []
         for crvs in sub1.data:
-            xy_plane_crvs[sub1].append([rs.CopyObject(curve, [0, 0, -rs.CurveStartPoint(curve).Z]) for curve in crvs if curve!=None and rs.IsCurve(curve) and rs.IsCurveClosed(curve)])
+            xy_plane_crvs[sub1].append([rs.CopyObject(curve, [0, 0, -rs.CurveStartPoint(curve).Z]) for curve in crvs if curve is not None and rs.IsCurve(curve) and rs.IsCurveClosed(curve)])
     if xy_plane_crvs.get(sub2) == None:
         xy_plane_crvs[sub2] = []
         for crvs in sub2.data:
-            xy_plane_crvs[sub2].append([rs.CopyObject(curve, [0, 0, -rs.CurveStartPoint(curve).Z]) for curve in crvs if curve!=None and rs.IsCurve(curve) and rs.IsCurveClosed(curve)])
+            xy_plane_crvs[sub2].append([rs.CopyObject(curve, [0, 0, -rs.CurveStartPoint(curve).Z]) for curve in crvs if curve is not None and rs.IsCurve(curve) and rs.IsCurveClosed(curve)])
 
     for curves1 in xy_plane_crvs[sub1]:
         for curves2 in xy_plane_crvs[sub2]:

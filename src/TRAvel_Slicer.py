@@ -110,7 +110,7 @@ def get_transition_movements(t, node_path, start_point):
         if node_path[s].data.height!=node_path[s-1].data.height:
             # only compare to boxes within nozzle height chunk
             boxes = []
-        if node_path[s].data.box!=None: boxes.append(node_path[s].data.box)
+        if node_path[s].data.box is not None: boxes.append(node_path[s].data.box)
 
         for node in node_path[s].data.sub_nodes:
             curves = node.data
@@ -397,7 +397,7 @@ def connect_spiralled_nodes(root, offset):
     for p in range(len(path)):
         node = all_nodes[path[p][0]]
         indices = get_marching_indices(node, path[p][1], path[p][2], path[p][3])
-        if indices != None:
+        if indices is not None:
             spiral = spiral + [node.fermat_spiral[idx] for idx in indices]
 
     return spiral
@@ -494,7 +494,7 @@ def find_connections(node, offset):
         find_connections(child, offset)
 
     parent = node.parent
-    if parent!=None and parent.fermat_spiral!=None:
+    if parent is not None and parent.fermat_spiral is not None:
         connect_node_to_parent(node, parent, offset)
 
 
@@ -876,7 +876,7 @@ def TRAvel_Slice(t, shape, all_curves, wall_mode=False, walls=3, fill_bottom=Fal
         if node_path[s].data.height!=node_path[s-1].data.height:
             # only compare to boxes within nozzle height chunk
             boxes = []
-        if node_path[s].data.box!=None: boxes.append(node_path[s].data.box)
+        if node_path[s].data.box is not None: boxes.append(node_path[s].data.box)
 
         for node in node_path[s].data.sub_nodes:
             start_point = t.get_position()

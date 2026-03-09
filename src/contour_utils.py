@@ -454,7 +454,7 @@ def split_curve(curve, split_point, tolerance):
     split_circ = rs.AddCircle(split_point, tolerance/2)
     intersections = rs.CurveCurveIntersection(curve, split_circ)
     split_curves = [curve]
-    if intersections!=None and len(intersections)>1:
+    if intersections is not None and len(intersections)>1:
         try:
             # generate both possible trimmed curves and use the longer one. a bit of a hack, but usually right
             split_curves1 = rs.TrimCurve(curve, [intersections[1][5], intersections[0][5]], delete_input=False)
@@ -480,13 +480,13 @@ def get_corners(curve, resolution=None):
     corners = []
     if rs.IsPolyline(curve):
         poly = curve
-    elif resolution!=None and resolution>0:
+    elif resolution is not None and resolution>0:
         poly = rs.ConvertCurveToPolyline(curve, min_edge_length=resolution/4)
     else: poly = rs.ConvertCurveToPolyline(curve)
 
     for pnt in rs.PolylineVertices(poly):
         curv = rs.CurveCurvature(curve, rs.CurveClosestPoint(curve, pnt))
-        if curv!=None and curv[3]<0.5:
+        if curv is not None and curv[3]<0.5:
             corners.append(pnt)
 
     return corners
