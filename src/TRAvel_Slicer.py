@@ -266,9 +266,6 @@ def spiral_contours(t, isocontours, start_index=0):
 
 def fermat_spiral(contours, start_pnt, offset):
     isocontours = [crv for crv in contours]
-    print("Number of isocontours: ", len(isocontours))
-    print("Length of isocontour 0:", rs.CurveLength(isocontours[0]))
-    print("Length of isocontour 1:", rs.CurveLength(isocontours[1]))
 
     offset = float(offset)*0.8
 
