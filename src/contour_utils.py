@@ -249,8 +249,15 @@ def trim_curve(curve, offset, start_pnt):
             crv_length = rs.CurveLength(trim_crv)
             if crv_length<offset*2:
                 param = inter[5]
-    
-    return rs.TrimCurve(curve, [param, start_param], delete_input=False)
+    trimmed_curves = rs.SplitCurve(curve, [param, start_param], delete_input=False)
+    trimmed_curve = None
+    max_length = 0
+    for crv in trimmed_curves:
+        length = rs.CurveLength(crv)
+        if length > max_length:
+            trimmed_curve = crv
+            max_length = length
+    return trimmed_curve
 
 
 def connect_curve_groups(curve_groups, gap, initial_offset=0.0):
