@@ -154,10 +154,10 @@ def get_curves(shape, z, retry=0, initial_curves=None):
 
     curves = repair_curves(initial_curves)
 
-    if initial_curves > 0 and len(curves) == 0 and retry==0:
+    if len(initial_curves) > 0 and len(curves) == 0 and retry==0:
         print("Slicing shape at height "+str(z)+" was unsuccessful. Retrying at "+str(round(float(z)+0.01, 3))+".")
         return get_curves(shape, float(z)+0.01, retry=retry+1, initial_curves=None)
-    elif initial_curves > 0 and len(curves) == 0 and retry==1:
+    elif len(initial_curves) > 0 and len(curves) == 0 and retry==1:
         print("Slicing shape at height "+str(z)+" was unsuccessful. Retrying at "+str(round(float(z)-0.02, 3))+".")
         return get_curves(shape, float(z)-0.02, retry=retry+1, initial_curves=None)
 
