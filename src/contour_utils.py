@@ -48,7 +48,6 @@ def get_contours(curve, offset, walls=3, wall_mode=False, separate_wall=True):
 def get_isocontours(curve, offset, parent, wall_mode=False, walls=3):
     new_curves = get_isocontour(curve, offset)
     if not new_curves:
-        print("no new curves. returning empty list")
         return []
     else:
         curves = [] + new_curves

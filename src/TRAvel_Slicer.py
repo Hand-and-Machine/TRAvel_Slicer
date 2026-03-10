@@ -310,12 +310,8 @@ def fermat_spiral(contours, start_pnt, offset):
         ll_prime = rs.CurveClosestPoint(isocontours[i+1], ll_pnt+rs.VectorSubtract(l_prime_pnt, l_pnt))
         ll_prime_pnt = rs.EvaluateCurve(isocontours[i+1], ll_prime)
 
-        try:
-            joining_curves.append(rs.AddCurve([l_pnt, l_prime_pnt]))
-            joining_curves.append(rs.AddCurve([ll_pnt, ll_prime_pnt]))
-        except Exception as e:
-            print("tried to join and add curve")
-            print(e)
+        joining_curves.append(rs.AddCurve([l_pnt, l_prime_pnt]))
+        joining_curves.append(rs.AddCurve([ll_pnt, ll_prime_pnt]))
 
         start = l_prime_pnt
         start_param = l_prime
@@ -326,13 +322,9 @@ def fermat_spiral(contours, start_pnt, offset):
         trims.append([l, start_param])
 
     for i in range(len(isocontours)):
-        try:
-            if trims[i][0] < 0.0000001: trims[i][0] = 0.0
-            if trims[i][1] < 0.0000001: trims[i][1] = 0.0
-            isocontours[i] = rs.TrimCurve(isocontours[i], trims[i], delete_input=False)
-        except Exception as e:
-            print("tried to trim curve")
-            print(e)
+        if trims[i][0] < 0.0000001: trims[i][0] = 0.0
+        if trims[i][1] < 0.0000001: trims[i][1] = 0.0
+        isocontours[i] = rs.TrimCurve(isocontours[i], trims[i], delete_input=False)
 
     spiraled_curve = rs.JoinCurves(isocontours+joining_curves, tolerance=offset/2.)
     if len(spiraled_curve) > 1:
@@ -901,4 +893,4 @@ def TRAvel_Slice(t, shape, all_curves, wall_mode=False, walls=3, fill_bottom=Fal
         print("Fermat Spiraling time: "+str(round(fermat_time, 3))+" seconds")
         print("Full path generation: "+str(round(time.time()-overall_start_time, 3))+" seconds")
 
-    return outer_travel_paths, inner_travel_paths, tree, node_path, path, edges, connected_curves
+    return outer_travel_paths, inner_travel_paths, tree, node_path, path, edges
