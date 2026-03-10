@@ -266,6 +266,9 @@ def spiral_contours(t, isocontours, start_index=0):
 
 def fermat_spiral(contours, start_pnt, offset):
     isocontours = [crv for crv in contours]
+    print("Number of isocontours: ", len(isocontours))
+    print("Length of isocontour 0:", rs.CurveLength(isocontours[0]))
+    print("Length of isocontour 1:", rs.CurveLength(isocontours[1]))
 
     offset = float(offset)*0.8
 
@@ -629,9 +632,6 @@ def fill_curve_with_fermat_spiral(t, curve, bboxes=[], move_up=True, start_pnt=N
                 elif len(all_nodes) == 1:
                     inner_regions.append(all_nodes[0].fermat_spiral)
 
-            #amt = 1.0
-            #if t.get_printer() == 'ender': amt = 3.0
-
             start_point = rs.EvaluateCurve(curve, rs.CurveClosestPoint(curve, start_pnt))
             outer_wall = trim_curve(node.data, extrude_width*0.5, start_point)
 
@@ -658,7 +658,7 @@ def fill_curve_with_fermat_spiral(t, curve, bboxes=[], move_up=True, start_pnt=N
                     outer_travel_paths = outer_travel_paths + travel_paths
                 final_spiral = final_spiral + outer_points
     else:
-        region_tree = segment_tree(root)
+        region_tree = segment_tree(root.children[0])
         all_nodes = region_tree.get_all_nodes([])
         for n in all_nodes:
             start_point = rs.EvaluateCurve(n.sub_nodes[0], rs.CurveClosestPoint(n.sub_nodes[0], start_pnt))

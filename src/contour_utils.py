@@ -21,8 +21,8 @@ def get_contours(curve, offset, walls=3, wall_mode=False, separate_wall=True):
     root.depth = -1
     isocontours = []
 
-    if not separate_wall:
-        root.data = curve
+    #if not separate_wall:
+    #    root.data = curve
 
     if first_contours is not None:
         for crv in first_contours:
