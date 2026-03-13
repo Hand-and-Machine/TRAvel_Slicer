@@ -48,7 +48,6 @@ def get_contours(curve, offset, walls=3, wall_mode=False, separate_wall=True):
 def get_isocontours(curve, offset, parent, wall_mode=False, walls=3):
     new_curves = get_isocontour(curve, offset)
     if not new_curves:
-        print("no new curves. returning empty list")
         return []
     else:
         curves = [] + new_curves
@@ -79,7 +78,6 @@ def get_isocontour(curve, offset, reverse=False, fine_precision=False):
     else: dist = get_segment_distance(offset)
     equi_pnts = [pnt for pnt in rs.DivideCurveEquidistant(curve, dist, True)]
     if len(equi_pnts) < 4:
-        print("Points less than 4 problem.")
         return None
 
     points = [(equi_pnts[p], rs.VectorSubtract(equi_pnts[(p+1) % len(equi_pnts)], equi_pnts[(p-1) % len(equi_pnts)])) for p in range(len(equi_pnts))]
