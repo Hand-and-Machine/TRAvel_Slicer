@@ -322,17 +322,17 @@ def fermat_spiral(contours, start_pnt, offset):
         trims.append([l, start_param])
 
     for i in range(len(isocontours)):
-        if trims[i][0] < 0.0000001: trims[i][0] = 0.0
-        if trims[i][1] < 0.0000001: trims[i][1] = 0.0
+        if abs(trims[i][0]) < 0.0000001: trims[i][0] = 0.0
+        if abs(trims[i][1]) < 0.0000001: trims[i][1] = 0.0
         isocontours[i] = rs.TrimCurve(isocontours[i], trims[i], delete_input=False)
 
     spiraled_curve = rs.JoinCurves(isocontours+joining_curves, tolerance=offset/2.)
     if len(spiraled_curve) > 1:
-        print(rs.CurveStartPoint(spiraled_curve[0]).Z)
-        for sp_crv in spiraled_curve:
-            print(rs.CurveLength(sp_crv))
+        #print(rs.CurveStartPoint(spiraled_curve[0]).Z)
+        #for sp_crv in spiraled_curve:
+            #print(rs.CurveLength(sp_crv))
         spiraled_curve = [sp_crv for sp_crv in spiraled_curve if rs.CurveLength(sp_crv)>offset]
-        print(spiraled_curve)
+        #print(spiraled_curve)
 
     try:
         return rs.DivideCurve(spiraled_curve, get_num_points(spiraled_curve, offset))
